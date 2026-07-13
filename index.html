@@ -155,16 +155,13 @@
 
     <script>
       // ===== KONFIGURASI =====
-
       const OFFICE_LAT = -7.891745; // Ganti dengan latitude kantor
       const OFFICE_LNG = 112.664147; // Ganti dengan longitude kantor
-      // const OFFICE_LAT = -7.872989; // Ganti dengan latitude kantor
-      // const OFFICE_LNG = 112.6861417; // Ganti dengan longitude kantor
       const RADIUS_METER = 100; // Jarak maksimal (meter)
 
-      // URL Apps Script Web App (otomatis didapat)
+      // URL Apps Script (pastikan URL ini yang terbaru dari deploy GAS)
       const SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbyqj6s_7TCDHIFTYnhoYMNUDJzz5u8T_voFHShCKpwTNm1ukJI_jRWAA2_mdVSTOOsr/exec"; // URL asli dari GAS
+        "https://script.google.com/macros/s/AKfycbyG8JXnwolvXx6lL4Bqamm8jXmZbABhaqN-_33xCns3ZX2MXmaaAo9nl6XWrpl8fiUu/exec";
 
       // ===== STATE =====
       let currentPos = null;
@@ -301,7 +298,7 @@
       // Panggil setiap kali nama berubah atau posisi berubah
       namaInput.addEventListener("input", updateButtons);
 
-      // ===== ABSEN =====
+      // ===== ABSEN (DENGAN MODE NO-CORS) =====
       async function absen(jenis) {
         const nama = namaInput.value.trim();
         if (!nama) {
@@ -331,24 +328,23 @@
           return;
         }
 
-        const body = new URLSearchParams({
-          nama: nama,
-          jenis: jenis,
-          lat: currentPos.lat,
-          lng: currentPos.lng,
-        });
-
         try {
           showMessage("Mengirim data...", "info");
-          const res = await fetch(SCRIPT_URL, { method: "POST", body });
-          if (res.ok) {
-            // Simpan state
-            saveAttendanceState({ status: jenis.toLowerCase(), date: today });
-            showMessage(`✅ Absen ${jenis} berhasil!`, "success");
-            updateButtons();
-          } else {
-            throw new Error("Respon server tidak OK");
-          }
+          // Gunakan mode no-cors agar tidak diblokir CORS
+          await fetch(SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            body: new URLSearchParams({
+              nama: nama,
+              jenis: jenis,
+              lat: currentPos.lat,
+              lng: currentPos.lng,
+            }),
+          });
+          // Karena mode no-cors tidak bisa baca respons, kita anggap selalu berhasil
+          saveAttendanceState({ status: jenis.toLowerCase(), date: today });
+          showMessage(`✅ Absen ${jenis} berhasil!`, "success");
+          updateButtons();
         } catch (e) {
           showMessage("❌ Gagal mengirim data. Coba lagi.", "error");
           console.error(e);
