@@ -1,0 +1,367 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Absensi Digital</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Segoe UI", Roboto, sans-serif;
+        background: #f0f4f8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .card {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+      }
+      h1 {
+        font-size: 24px;
+        margin-bottom: 5px;
+        color: #1e293b;
+      }
+      .subtitle {
+        font-size: 14px;
+        color: #64748b;
+        margin-bottom: 25px;
+      }
+      .status-box {
+        background: #f1f5f9;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+      .status-text {
+        font-weight: 600;
+        font-size: 18px;
+        color: #0f172a;
+      }
+      .status-detail {
+        font-size: 13px;
+        color: #475569;
+        margin-top: 5px;
+      }
+      .input-group {
+        margin-bottom: 20px;
+        text-align: left;
+      }
+      .input-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        font-size: 14px;
+        color: #334155;
+      }
+      .input-group input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 16px;
+        transition: 0.2s;
+      }
+      .input-group input:focus {
+        border-color: #3b82f6;
+        outline: none;
+      }
+      .btn {
+        width: 100%;
+        padding: 14px;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        color: white;
+        background: #3b82f6;
+        cursor: pointer;
+        transition: 0.2s;
+        margin-bottom: 10px;
+      }
+      .btn:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+      .btn-out {
+        background: #ef4444;
+      }
+      .btn-out:disabled {
+        background: #fca5a5;
+      }
+      .message {
+        margin-top: 15px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .error {
+        color: #dc2626;
+      }
+      .success {
+        color: #16a34a;
+      }
+      .info {
+        color: #2563eb;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>🏢 Absensi Digital</h1>
+      <div class="subtitle">Absen hanya bisa dilakukan di area kantor</div>
+
+      <div class="status-box">
+        <div class="status-text" id="statusLokasi">Mencari lokasi...</div>
+        <div class="status-detail" id="detailLokasi">
+          Mohon izinkan akses GPS
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label for="nama">Nama Karyawan</label>
+        <input
+          type="text"
+          id="nama"
+          placeholder="Masukkan nama Anda"
+          autocomplete="off"
+        />
+      </div>
+
+      <button class="btn" id="btnMasuk" disabled onclick="absen('Masuk')">
+        ✅ Absen Masuk
+      </button>
+      <button
+        class="btn btn-out"
+        id="btnPulang"
+        disabled
+        onclick="absen('Pulang')"
+      >
+        🚪 Absen Pulang
+      </button>
+
+      <div class="message" id="message"></div>
+    </div>
+
+    <script>
+      // ===== KONFIGURASI =====
+      const OFFICE_LAT = -6.1754; // Ganti dengan latitude kantor
+      const OFFICE_LNG = 106.8272; // Ganti dengan longitude kantor
+      const RADIUS_METER = 100; // Jarak maksimal (meter)
+
+      // URL Apps Script Web App (otomatis didapat)
+      const SCRIPT_URL = "<?= ScriptApp.getService().getUrl() ?>";
+
+      // ===== STATE =====
+      let currentPos = null;
+      let distance = null;
+      let isInside = false;
+      let watchId = null;
+      let today = new Date().toLocaleDateString("id-ID");
+
+      const namaInput = document.getElementById("nama");
+      const btnMasuk = document.getElementById("btnMasuk");
+      const btnPulang = document.getElementById("btnPulang");
+      const statusLokasi = document.getElementById("statusLokasi");
+      const detailLokasi = document.getElementById("detailLokasi");
+      const messageEl = document.getElementById("message");
+
+      // localStorage
+      function getAttendanceState() {
+        const data = localStorage.getItem("absensi_state");
+        return data ? JSON.parse(data) : null;
+      }
+      function saveAttendanceState(state) {
+        localStorage.setItem("absensi_state", JSON.stringify(state));
+      }
+      function clearStateIfNewDay() {
+        const state = getAttendanceState();
+        if (state && state.date !== today) {
+          localStorage.removeItem("absensi_state");
+          return null;
+        }
+        return state;
+      }
+
+      // Load nama tersimpan
+      const savedNama = localStorage.getItem("absensi_nama");
+      if (savedNama) namaInput.value = savedNama;
+      namaInput.addEventListener("change", () => {
+        localStorage.setItem("absensi_nama", namaInput.value.trim());
+      });
+
+      // ===== GEOLOCATION =====
+      function haversineDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // meter
+        const toRad = (deg) => (deg * Math.PI) / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat1)) *
+            Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      function updateLocation(pos) {
+        currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        distance = haversineDistance(
+          currentPos.lat,
+          currentPos.lng,
+          OFFICE_LAT,
+          OFFICE_LNG,
+        );
+        isInside = distance <= RADIUS_METER;
+
+        if (isInside) {
+          statusLokasi.textContent = "📍 Anda di dalam area kantor";
+          statusLokasi.style.color = "#16a34a";
+          detailLokasi.textContent = `Jarak: ${Math.round(distance)} meter (diperbolehkan)`;
+        } else {
+          statusLokasi.textContent = "🚫 Anda di luar area kantor";
+          statusLokasi.style.color = "#dc2626";
+          detailLokasi.textContent = `Jarak: ${Math.round(distance)} meter (terlalu jauh)`;
+        }
+        updateButtons();
+      }
+
+      function locationError(err) {
+        statusLokasi.textContent = "⚠️ Gagal mendapat lokasi";
+        statusLokasi.style.color = "#dc2626";
+        detailLokasi.textContent = err.message || "Periksa izin GPS";
+        isInside = false;
+        updateButtons();
+      }
+
+      function startWatch() {
+        if ("geolocation" in navigator) {
+          watchId = navigator.geolocation.watchPosition(
+            updateLocation,
+            locationError,
+            {
+              enableHighAccuracy: true,
+              maximumAge: 5000,
+              timeout: 10000,
+            },
+          );
+        } else {
+          statusLokasi.textContent = "❌ Browser tidak mendukung GPS";
+          statusLokasi.style.color = "#dc2626";
+        }
+      }
+
+      // ===== UI BUTTONS =====
+      function updateButtons() {
+        const state = clearStateIfNewDay() || {};
+        const nama = namaInput.value.trim();
+
+        if (!nama) {
+          btnMasuk.disabled = true;
+          btnPulang.disabled = true;
+          return;
+        }
+
+        if (!isInside) {
+          btnMasuk.disabled = true;
+          btnPulang.disabled = true;
+          return;
+        }
+
+        // Belum absen masuk hari ini → bisa absen masuk
+        if (
+          !state.status ||
+          state.status === "pulang" ||
+          state.date !== today
+        ) {
+          btnMasuk.disabled = false;
+          btnPulang.disabled = true;
+        }
+        // Sudah absen masuk → bisa absen pulang
+        else if (state.status === "masuk") {
+          btnMasuk.disabled = true;
+          btnPulang.disabled = false;
+        }
+      }
+
+      // Panggil setiap kali nama berubah atau posisi berubah
+      namaInput.addEventListener("input", updateButtons);
+
+      // ===== ABSEN =====
+      async function absen(jenis) {
+        const nama = namaInput.value.trim();
+        if (!nama) {
+          showMessage("Masukkan nama terlebih dahulu", "error");
+          return;
+        }
+        if (!currentPos) {
+          showMessage("Lokasi belum tersedia", "error");
+          return;
+        }
+
+        const state = clearStateIfNewDay() || {};
+        if (
+          jenis === "Masuk" &&
+          state.status === "masuk" &&
+          state.date === today
+        ) {
+          showMessage("Anda sudah absen masuk hari ini", "info");
+          return;
+        }
+        if (
+          jenis === "Pulang" &&
+          state.status === "pulang" &&
+          state.date === today
+        ) {
+          showMessage("Anda sudah absen pulang hari ini", "info");
+          return;
+        }
+
+        const body = new URLSearchParams({
+          nama: nama,
+          jenis: jenis,
+          lat: currentPos.lat,
+          lng: currentPos.lng,
+        });
+
+        try {
+          showMessage("Mengirim data...", "info");
+          const res = await fetch(SCRIPT_URL, { method: "POST", body });
+          if (res.ok) {
+            // Simpan state
+            saveAttendanceState({ status: jenis.toLowerCase(), date: today });
+            showMessage(`✅ Absen ${jenis} berhasil!`, "success");
+            updateButtons();
+          } else {
+            throw new Error("Respon server tidak OK");
+          }
+        } catch (e) {
+          showMessage("❌ Gagal mengirim data. Coba lagi.", "error");
+          console.error(e);
+        }
+      }
+
+      function showMessage(text, type) {
+        messageEl.textContent = text;
+        messageEl.className = "message " + (type || "info");
+        setTimeout(() => {
+          messageEl.textContent = "";
+        }, 5000);
+      }
+
+      // ===== INISIALISASI =====
+      updateButtons();
+      startWatch();
+    </script>
+  </body>
+</html>
