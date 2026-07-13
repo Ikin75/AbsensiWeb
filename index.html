@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Absensi Digital</title>
+    <title>Absensi Digital by ID</title>
     <style>
       * {
         box-sizing: border-box;
@@ -114,6 +114,14 @@
       .info {
         color: #2563eb;
       }
+      .id-info {
+        font-size: 13px;
+        color: #475569;
+        margin-top: 5px;
+      }
+      .hidden {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -128,14 +136,22 @@
         </div>
       </div>
 
+      <!-- Input ID Karyawan -->
       <div class="input-group">
-        <label for="nama">Nama Karyawan</label>
+        <label for="idKaryawan">ID Karyawan</label>
         <input
           type="text"
-          id="nama"
-          placeholder="Masukkan nama Anda"
+          id="idKaryawan"
+          placeholder="Masukkan ID Anda"
           autocomplete="off"
         />
+        <div class="id-info" id="idInfo"></div>
+      </div>
+
+      <!-- Nama akan muncul otomatis setelah ID valid, readonly -->
+      <div class="input-group" id="namaGroup" style="display: none">
+        <label for="nama">Nama Karyawan</label>
+        <input type="text" id="nama" placeholder="Nama Anda" readonly />
       </div>
 
       <button class="btn" id="btnMasuk" disabled onclick="absen('Masuk')">
@@ -154,7 +170,7 @@
     </div>
 
     <script>
-      // ===== KONFIGURASI MULTI LOKASI =====
+      // ===== KONFIGURASI LOKASI =====
       const OFFICE_LOCATIONS = [
         {
           nama: "PT Santara Utama (Malang)",
@@ -165,21 +181,54 @@
         {
           nama: "BAT Singosari",
           lat: -7.8728283,
-          lng: 112.6837884,
+          lng: 112.6839984,
           radius: 150,
         },
       ];
 
       const SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbyG8JXnwolvXx6lL4Bqamm8jXmZbABhaqN-_33xCns3ZX2MXmaaAo9nl6XWrpl8fiUu/exec";
+        "https://script.google.com/macros/s/AKfycbxbstMrezKlDNA6gxRFsvWRerFRPInfCPJLgsqcBg5WM0vbfM7N74U9QnpZmjagzQyS/exec";
 
-      // ===== STATE =====
-      let currentPos = null;
-      let isInside = false;
-      let currentLocationName = null; // <-- untuk menyimpan nama PT yang terdeteksi
-      let watchId = null;
+      // Daftar karyawan (sementara disimpan di localStorage agar bisa dikelola)
+      // Default awal jika belum ada data
+      const DEFAULT_KARYAWAN = [
+        { id: "MK001", nama: "dr. Hasniah Harun, MKK" },
+        { id: "MK002", nama: "dr. Beta Wahyudi" },
+        { id: "MK003", nama: "Faqih" },
+        { id: "MK004", nama: "Faqih" },
+      ];
+
+      // ===== FUNGSI KARYAWAN =====
+      function getDaftarKaryawan() {
+        const data = localStorage.getItem("daftar_karyawan");
+        return data ? JSON.parse(data) : DEFAULT_KARYAWAN;
+      }
+
+      function simpanDaftarKaryawan(daftar) {
+        localStorage.setItem("daftar_karyawan", JSON.stringify(daftar));
+      }
+
+      // Inisialisasi jika belum ada
+      if (!localStorage.getItem("daftar_karyawan")) {
+        simpanDaftarKaryawan(DEFAULT_KARYAWAN);
+      }
+
+      // State absensi per ID
+      function getAttendanceState(id) {
+        const data = localStorage.getItem(`absensi_${id}`);
+        return data ? JSON.parse(data) : null;
+      }
+
+      function saveAttendanceState(id, state) {
+        localStorage.setItem(`absensi_${id}`, JSON.stringify(state));
+      }
+
       let today = new Date().toLocaleDateString("id-ID");
 
+      // Elemen DOM
+      const idInput = document.getElementById("idKaryawan");
+      const idInfo = document.getElementById("idInfo");
+      const namaGroup = document.getElementById("namaGroup");
       const namaInput = document.getElementById("nama");
       const btnMasuk = document.getElementById("btnMasuk");
       const btnPulang = document.getElementById("btnPulang");
@@ -187,27 +236,11 @@
       const detailLokasi = document.getElementById("detailLokasi");
       const messageEl = document.getElementById("message");
 
-      function getAttendanceState() {
-        const data = localStorage.getItem("absensi_state");
-        return data ? JSON.parse(data) : null;
-      }
-      function saveAttendanceState(state) {
-        localStorage.setItem("absensi_state", JSON.stringify(state));
-      }
-      function clearStateIfNewDay() {
-        const state = getAttendanceState();
-        if (state && state.date !== today) {
-          localStorage.removeItem("absensi_state");
-          return null;
-        }
-        return state;
-      }
-
-      const savedNama = localStorage.getItem("absensi_nama");
-      if (savedNama) namaInput.value = savedNama;
-      namaInput.addEventListener("change", () => {
-        localStorage.setItem("absensi_nama", namaInput.value.trim());
-      });
+      let currentPos = null;
+      let isInside = false;
+      let currentLocationName = null;
+      let currentKaryawan = null; // objek {id, nama} yang sedang aktif
+      let watchId = null;
 
       // ===== GEOLOCATION =====
       function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -242,16 +275,16 @@
         currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const hasil = cekLokasiTerdekat(currentPos.lat, currentPos.lng);
         isInside = hasil.inside;
-        currentLocationName = hasil.nama; // simpan nama PT
+        currentLocationName = hasil.nama;
 
         if (isInside) {
           statusLokasi.textContent = `📍 Anda di dalam area ${hasil.nama}`;
           statusLokasi.style.color = "#16a34a";
-          detailLokasi.textContent = `Jarak: ${Math.round(hasil.jarak)} meter (diperbolehkan)`;
+          detailLokasi.textContent = `Jarak: ${Math.round(hasil.jarak)} meter`;
         } else {
           statusLokasi.textContent = "🚫 Anda di luar area kantor";
           statusLokasi.style.color = "#dc2626";
-          detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter (terlalu jauh)`;
+          detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter`;
           currentLocationName = null;
         }
         updateButtons();
@@ -283,11 +316,39 @@
         }
       }
 
-      // ===== UI BUTTONS =====
+      // ===== LOGIKA ID & NAMA =====
+      idInput.addEventListener("input", function () {
+        const id = this.value.trim();
+        const daftar = getDaftarKaryawan();
+        const karyawan = daftar.find((k) => k.id === id);
+        if (karyawan) {
+          idInfo.textContent = `✅ Nama: ${karyawan.nama}`;
+          idInfo.style.color = "#16a34a";
+          namaInput.value = karyawan.nama;
+          namaGroup.style.display = "block";
+          currentKaryawan = karyawan;
+          // Reset tombol sesuai state ID ini
+          updateButtons();
+        } else {
+          idInfo.textContent = "ID tidak ditemukan";
+          idInfo.style.color = "#dc2626";
+          namaGroup.style.display = "none";
+          currentKaryawan = null;
+          updateButtons();
+        }
+      });
+
+      function clearStateIfNewDay(id) {
+        const state = getAttendanceState(id);
+        if (state && state.date !== today) {
+          saveAttendanceState(id, null); // hapus state lama
+          return null;
+        }
+        return state;
+      }
+
       function updateButtons() {
-        const state = clearStateIfNewDay() || {};
-        const nama = namaInput.value.trim();
-        if (!nama) {
+        if (!currentKaryawan) {
           btnMasuk.disabled = true;
           btnPulang.disabled = true;
           return;
@@ -297,6 +358,10 @@
           btnPulang.disabled = true;
           return;
         }
+
+        const id = currentKaryawan.id;
+        const state = clearStateIfNewDay(id) || {};
+
         if (
           !state.status ||
           state.status === "pulang" ||
@@ -309,13 +374,11 @@
           btnPulang.disabled = false;
         }
       }
-      namaInput.addEventListener("input", updateButtons);
 
       // ===== ABSEN =====
       async function absen(jenis) {
-        const nama = namaInput.value.trim();
-        if (!nama) {
-          showMessage("Masukkan nama terlebih dahulu", "error");
+        if (!currentKaryawan) {
+          showMessage("Masukkan ID terlebih dahulu", "error");
           return;
         }
         if (!currentPos) {
@@ -323,7 +386,10 @@
           return;
         }
 
-        const state = clearStateIfNewDay() || {};
+        const id = currentKaryawan.id;
+        const nama = currentKaryawan.nama;
+        const state = clearStateIfNewDay(id) || {};
+
         if (
           jenis === "Masuk" &&
           state.status === "masuk" &&
@@ -343,19 +409,20 @@
 
         try {
           showMessage("Mengirim data...", "info");
-          // Kirim juga nama lokasi (currentLocationName)
           await fetch(SCRIPT_URL, {
             method: "POST",
             mode: "no-cors",
             body: new URLSearchParams({
+              id: id,
               nama: nama,
               jenis: jenis,
               lat: currentPos.lat,
               lng: currentPos.lng,
-              lokasi: currentLocationName || "Tidak diketahui", // <-- tambahkan ini
+              lokasi: currentLocationName || "Tidak diketahui",
             }),
           });
-          saveAttendanceState({ status: jenis.toLowerCase(), date: today });
+          // Simpan state untuk ID ini
+          saveAttendanceState(id, { status: jenis.toLowerCase(), date: today });
           showMessage(`✅ Absen ${jenis} berhasil!`, "success");
           updateButtons();
         } catch (e) {
@@ -372,8 +439,11 @@
         }, 5000);
       }
 
-      updateButtons();
+      // Inisialisasi
       startWatch();
+      // Jika localStorage masih menyimpan ID terakhir? opsional, tidak perlu.
+      // Pastikan tombol awal disable
+      updateButtons();
     </script>
   </body>
 </html>
