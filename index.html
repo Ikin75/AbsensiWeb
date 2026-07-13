@@ -155,8 +155,6 @@
 
     <script>
       // ===== KONFIGURASI MULTI LOKASI =====
-      // Tambahkan atau kurangi lokasi di bawah ini.
-      // Setiap lokasi punya: lat, lng, radius (meter), dan nama (tampilan).
       const OFFICE_LOCATIONS = [
         {
           nama: "PT Santara Utama (Malang)",
@@ -172,13 +170,13 @@
         },
       ];
 
-      // URL Apps Script (ganti dengan URL Anda)
       const SCRIPT_URL =
         "https://script.google.com/macros/s/AKfycbyG8JXnwolvXx6lL4Bqamm8jXmZbABhaqN-_33xCns3ZX2MXmaaAo9nl6XWrpl8fiUu/exec";
 
       // ===== STATE =====
       let currentPos = null;
       let isInside = false;
+      let currentLocationName = null; // <-- untuk menyimpan nama PT yang terdeteksi
       let watchId = null;
       let today = new Date().toLocaleDateString("id-ID");
 
@@ -189,7 +187,6 @@
       const detailLokasi = document.getElementById("detailLokasi");
       const messageEl = document.getElementById("message");
 
-      // localStorage
       function getAttendanceState() {
         const data = localStorage.getItem("absensi_state");
         return data ? JSON.parse(data) : null;
@@ -206,14 +203,13 @@
         return state;
       }
 
-      // Load nama tersimpan
       const savedNama = localStorage.getItem("absensi_nama");
       if (savedNama) namaInput.value = savedNama;
       namaInput.addEventListener("change", () => {
         localStorage.setItem("absensi_nama", namaInput.value.trim());
       });
 
-      // ===== GEOLOCATION & HITUNG JARAK =====
+      // ===== GEOLOCATION =====
       function haversineDistance(lat1, lon1, lat2, lon2) {
         const R = 6371000;
         const toRad = (deg) => (deg * Math.PI) / 180;
@@ -234,7 +230,6 @@
             return { nama: lokasi.nama, jarak: jarak, inside: true };
           }
         }
-        // Ambil jarak ke lokasi terdekat untuk info
         let minJarak = Infinity;
         for (let lokasi of OFFICE_LOCATIONS) {
           const jarak = haversineDistance(lat, lng, lokasi.lat, lokasi.lng);
@@ -247,6 +242,7 @@
         currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const hasil = cekLokasiTerdekat(currentPos.lat, currentPos.lng);
         isInside = hasil.inside;
+        currentLocationName = hasil.nama; // simpan nama PT
 
         if (isInside) {
           statusLokasi.textContent = `📍 Anda di dalam area ${hasil.nama}`;
@@ -256,6 +252,7 @@
           statusLokasi.textContent = "🚫 Anda di luar area kantor";
           statusLokasi.style.color = "#dc2626";
           detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter (terlalu jauh)`;
+          currentLocationName = null;
         }
         updateButtons();
       }
@@ -265,6 +262,7 @@
         statusLokasi.style.color = "#dc2626";
         detailLokasi.textContent = err.message || "Periksa izin GPS";
         isInside = false;
+        currentLocationName = null;
         updateButtons();
       }
 
@@ -289,19 +287,16 @@
       function updateButtons() {
         const state = clearStateIfNewDay() || {};
         const nama = namaInput.value.trim();
-
         if (!nama) {
           btnMasuk.disabled = true;
           btnPulang.disabled = true;
           return;
         }
-
         if (!isInside) {
           btnMasuk.disabled = true;
           btnPulang.disabled = true;
           return;
         }
-
         if (
           !state.status ||
           state.status === "pulang" ||
@@ -314,7 +309,6 @@
           btnPulang.disabled = false;
         }
       }
-
       namaInput.addEventListener("input", updateButtons);
 
       // ===== ABSEN =====
@@ -349,6 +343,7 @@
 
         try {
           showMessage("Mengirim data...", "info");
+          // Kirim juga nama lokasi (currentLocationName)
           await fetch(SCRIPT_URL, {
             method: "POST",
             mode: "no-cors",
@@ -357,6 +352,7 @@
               jenis: jenis,
               lat: currentPos.lat,
               lng: currentPos.lng,
+              lokasi: currentLocationName || "Tidak diketahui", // <-- tambahkan ini
             }),
           });
           saveAttendanceState({ status: jenis.toLowerCase(), date: today });
@@ -376,7 +372,6 @@
         }, 5000);
       }
 
-      // ===== INISIALISASI =====
       updateButtons();
       startWatch();
     </script>
