@@ -154,18 +154,30 @@
     </div>
 
     <script>
-      // ===== KONFIGURASI =====
-      const OFFICE_LAT = -7.891745; // Ganti dengan latitude kantor
-      const OFFICE_LNG = 112.664147; // Ganti dengan longitude kantor
-      const RADIUS_METER = 100; // Jarak maksimal (meter)
+      // ===== KONFIGURASI MULTI LOKASI =====
+      // Tambahkan atau kurangi lokasi di bawah ini.
+      // Setiap lokasi punya: lat, lng, radius (meter), dan nama (tampilan).
+      const OFFICE_LOCATIONS = [
+        {
+          nama: "PT Santara Utama (Malang)",
+          lat: -7.891745,
+          lng: 112.664147,
+          radius: 100,
+        },
+        {
+          nama: "Kantor Cabang Surabaya",
+          lat: -7.250445,
+          lng: 112.768845,
+          radius: 150,
+        },
+      ];
 
-      // URL Apps Script (pastikan URL ini yang terbaru dari deploy GAS)
+      // URL Apps Script (ganti dengan URL Anda)
       const SCRIPT_URL =
         "https://script.google.com/macros/s/AKfycbyG8JXnwolvXx6lL4Bqamm8jXmZbABhaqN-_33xCns3ZX2MXmaaAo9nl6XWrpl8fiUu/exec";
 
       // ===== STATE =====
       let currentPos = null;
-      let distance = null;
       let isInside = false;
       let watchId = null;
       let today = new Date().toLocaleDateString("id-ID");
@@ -201,9 +213,9 @@
         localStorage.setItem("absensi_nama", namaInput.value.trim());
       });
 
-      // ===== GEOLOCATION =====
+      // ===== GEOLOCATION & HITUNG JARAK =====
       function haversineDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371000; // meter
+        const R = 6371000;
         const toRad = (deg) => (deg * Math.PI) / 180;
         const dLat = toRad(lat2 - lat1);
         const dLon = toRad(lon2 - lon1);
@@ -215,24 +227,35 @@
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       }
 
+      function cekLokasiTerdekat(lat, lng) {
+        for (let lokasi of OFFICE_LOCATIONS) {
+          const jarak = haversineDistance(lat, lng, lokasi.lat, lokasi.lng);
+          if (jarak <= lokasi.radius) {
+            return { nama: lokasi.nama, jarak: jarak, inside: true };
+          }
+        }
+        // Ambil jarak ke lokasi terdekat untuk info
+        let minJarak = Infinity;
+        for (let lokasi of OFFICE_LOCATIONS) {
+          const jarak = haversineDistance(lat, lng, lokasi.lat, lokasi.lng);
+          if (jarak < minJarak) minJarak = jarak;
+        }
+        return { nama: null, jarak: minJarak, inside: false };
+      }
+
       function updateLocation(pos) {
         currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        distance = haversineDistance(
-          currentPos.lat,
-          currentPos.lng,
-          OFFICE_LAT,
-          OFFICE_LNG,
-        );
-        isInside = distance <= RADIUS_METER;
+        const hasil = cekLokasiTerdekat(currentPos.lat, currentPos.lng);
+        isInside = hasil.inside;
 
         if (isInside) {
-          statusLokasi.textContent = "📍 Anda di dalam area kantor";
+          statusLokasi.textContent = `📍 Anda di dalam area ${hasil.nama}`;
           statusLokasi.style.color = "#16a34a";
-          detailLokasi.textContent = `Jarak: ${Math.round(distance)} meter (diperbolehkan)`;
+          detailLokasi.textContent = `Jarak: ${Math.round(hasil.jarak)} meter (diperbolehkan)`;
         } else {
           statusLokasi.textContent = "🚫 Anda di luar area kantor";
           statusLokasi.style.color = "#dc2626";
-          detailLokasi.textContent = `Jarak: ${Math.round(distance)} meter (terlalu jauh)`;
+          detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter (terlalu jauh)`;
         }
         updateButtons();
       }
@@ -279,7 +302,6 @@
           return;
         }
 
-        // Belum absen masuk hari ini → bisa absen masuk
         if (
           !state.status ||
           state.status === "pulang" ||
@@ -287,18 +309,15 @@
         ) {
           btnMasuk.disabled = false;
           btnPulang.disabled = true;
-        }
-        // Sudah absen masuk → bisa absen pulang
-        else if (state.status === "masuk") {
+        } else if (state.status === "masuk") {
           btnMasuk.disabled = true;
           btnPulang.disabled = false;
         }
       }
 
-      // Panggil setiap kali nama berubah atau posisi berubah
       namaInput.addEventListener("input", updateButtons);
 
-      // ===== ABSEN (DENGAN MODE NO-CORS) =====
+      // ===== ABSEN =====
       async function absen(jenis) {
         const nama = namaInput.value.trim();
         if (!nama) {
@@ -330,7 +349,6 @@
 
         try {
           showMessage("Mengirim data...", "info");
-          // Gunakan mode no-cors agar tidak diblokir CORS
           await fetch(SCRIPT_URL, {
             method: "POST",
             mode: "no-cors",
@@ -341,7 +359,6 @@
               lng: currentPos.lng,
             }),
           });
-          // Karena mode no-cors tidak bisa baca respons, kita anggap selalu berhasil
           saveAttendanceState({ status: jenis.toLowerCase(), date: today });
           showMessage(`✅ Absen ${jenis} berhasil!`, "success");
           updateButtons();
