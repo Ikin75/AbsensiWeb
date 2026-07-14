@@ -214,6 +214,16 @@
       const SCRIPT_URL =
         "https://script.google.com/macros/s/AKfycbyvwdHuFdh-I3-Olw_dniImZMy_9Iu6SIPnZyJBWen9gmlT556XzpI81V1d0kekZ_2c/exec";
 
+      // Cek status absensi hari ini dari server (JSONP)
+      function checkStatusFromServer(id, callback) {
+        const script = document.createElement("script");
+        script.src =
+          SCRIPT_URL + "?action=checkStatus&id=" + id + "&callback=" + callback;
+        document.body.appendChild(script);
+        script.onload = function () {
+          document.body.removeChild(script);
+        };
+      }
       // Daftar karyawan (sementara disimpan di localStorage agar bisa dikelola)
       // Default awal jika belum ada data
       const DEFAULT_KARYAWAN = [
@@ -404,30 +414,55 @@
           showMessage("Lokasi belum tersedia", "error");
           return;
         }
+
         const id = currentKaryawan.id;
         const nama = currentKaryawan.nama;
-        const state = clearStateIfNewDay(id) || {};
-        if (
-          jenis === "Masuk" &&
-          state.status === "masuk" &&
-          state.date === today
-        ) {
-          showMessage("Anda sudah absen masuk hari ini", "info");
+
+        // Panggil validasi server sebelum absen
+        checkStatusFromServer(id, "handleStatusCheck");
+        window._pendingAbsen = { jenis, id, nama }; // simpan sementara
+      }
+
+      // Callback dari validasi server
+      function handleStatusCheck(response) {
+        const { jenis, id, nama } = window._pendingAbsen;
+        if (!response || response.status === undefined) {
+          showMessage("Gagal memvalidasi status, coba lagi.", "error");
           return;
         }
-        if (
-          jenis === "Pulang" &&
-          state.status === "pulang" &&
-          state.date === today
-        ) {
-          showMessage("Anda sudah absen pulang hari ini", "info");
+
+        const serverStatus = response.status; // 'masuk', 'pulang', atau 'belum'
+        const todayDate = response.date;
+
+        if (jenis === "Masuk" && serverStatus === "masuk") {
+          showMessage("Anda sudah absen masuk hari ini.", "info");
+          // update localStorage juga agar tombol sesuai
+          saveAttendanceState(id, { status: "masuk", date: today });
+          updateButtons();
           return;
         }
+        if (jenis === "Pulang" && serverStatus === "pulang") {
+          showMessage("Anda sudah absen pulang hari ini.", "info");
+          saveAttendanceState(id, { status: "pulang", date: today });
+          updateButtons();
+          return;
+        }
+        if (jenis === "Pulang" && serverStatus !== "masuk") {
+          showMessage("Anda belum absen masuk, tidak bisa pulang.", "error");
+          return;
+        }
+
+        // Lolos validasi, lakukan pengiriman absen
+        kirimAbsen(jenis, id, nama);
+      }
+
+      // Fungsi pengiriman absen (sama seperti sebelumnya)
+      async function kirimAbsen(jenis, id, nama) {
         try {
           showMessage("Mengirim data...", "info");
           await fetch(SCRIPT_URL, {
             method: "POST",
-            mode: "no-cors", // ← tambahkan ini
+            mode: "no-cors",
             body: new URLSearchParams({
               id: id,
               nama: nama,
@@ -452,7 +487,6 @@
           console.error(e);
         }
       }
-
       function showMessage(text, type) {
         messageEl.textContent = text;
         messageEl.className = "message " + (type || "info");
