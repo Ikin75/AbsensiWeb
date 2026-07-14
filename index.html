@@ -427,6 +427,7 @@
           showMessage("Mengirim data...", "info");
           await fetch(SCRIPT_URL, {
             method: "POST",
+            mode: "no-cors", // ← tambahkan ini
             body: new URLSearchParams({
               id: id,
               nama: nama,
