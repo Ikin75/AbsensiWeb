@@ -18,7 +18,7 @@
         justify-content: center;
         min-height: 100vh;
         padding: 20px;
-        flex-direction: column; /* agar footer bisa di bawah */
+        flex-direction: column;
       }
       .card {
         background: white;
@@ -28,7 +28,6 @@
         width: 100%;
         max-width: 400px;
         text-align: center;
-        margin-top: 10px;
       }
       .logo-container {
         margin-bottom: 5px;
@@ -128,20 +127,15 @@
         color: #475569;
         margin-top: 5px;
       }
-      .hidden {
-        display: none;
-      }
       .footer {
-        margin-top: 15px;
+        margin-top: 20px;
         font-size: 12px;
         color: #64748b;
-        text-align: center;
       }
     </style>
   </head>
   <body>
     <div class="card">
-      <!-- Logo di atas -->
       <div class="logo-container">
         <img src="logo.png" alt="Logo Perusahaan" />
       </div>
@@ -184,48 +178,30 @@
       </button>
 
       <div class="message" id="message"></div>
-      <!-- Footer Created by SANTARA -->
       <div class="footer">Created by SANTARA</div>
     </div>
 
     <script>
-      // ===== KONFIGURASI LOKASI =====
+      // ===== KONFIGURASI =====
       const OFFICE_LOCATIONS = [
         {
-          nama: "BAT Singosari",
+          nama: "BAT Singosari (utama)",
           lat: -7.891745,
           lng: 112.664147,
           radius: 100,
         },
         {
-          nama: "BAT Singosari",
+          nama: "BAT Singosari (area 2)",
           lat: -7.872989,
           lng: 112.6861417,
           radius: 150,
         },
-        {
-          nama: "BAT Karanglo",
-          lat: -7.916256,
-          lng: 112.6533,
-          radius: 100,
-        },
+        { nama: "BAT Karanglo", lat: -7.916256, lng: 112.6533, radius: 100 },
       ];
 
       const SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbyvwdHuFdh-I3-Olw_dniImZMy_9Iu6SIPnZyJBWen9gmlT556XzpI81V1d0kekZ_2c/exec";
+        "https://script.google.com/macros/s/AKfycbzLNvs-0vvSmTriwkWMT7x7NYxvxYs284sj6825VQqXmCgn3qnvpMenT7NBwikWzJnE/exec";
 
-      // Cek status absensi hari ini dari server (JSONP)
-      function checkStatusFromServer(id, callback) {
-        const script = document.createElement("script");
-        script.src =
-          SCRIPT_URL + "?action=checkStatus&id=" + id + "&callback=" + callback;
-        document.body.appendChild(script);
-        script.onload = function () {
-          document.body.removeChild(script);
-        };
-      }
-      // Daftar karyawan (sementara disimpan di localStorage agar bisa dikelola)
-      // Default awal jika belum ada data
       const DEFAULT_KARYAWAN = [
         { id: "MK001", nama: "dr. Hasniah, MKK" },
         { id: "MK002", nama: "dr. Beta" },
@@ -239,6 +215,25 @@
         { id: "MK010", nama: "Winda" },
       ];
 
+      // ===== STATE =====
+      let currentPos = null;
+      let isInside = false;
+      let currentLocationName = null;
+      let currentKaryawan = null;
+      let watchId = null;
+      let today = new Date().toLocaleDateString("id-ID");
+
+      const idInput = document.getElementById("idKaryawan");
+      const idInfo = document.getElementById("idInfo");
+      const namaGroup = document.getElementById("namaGroup");
+      const namaInput = document.getElementById("nama");
+      const btnMasuk = document.getElementById("btnMasuk");
+      const btnPulang = document.getElementById("btnPulang");
+      const statusLokasi = document.getElementById("statusLokasi");
+      const detailLokasi = document.getElementById("detailLokasi");
+      const messageEl = document.getElementById("message");
+
+      // ===== FUNGSI LOCAL STORAGE =====
       function getDaftarKaryawan() {
         const data = localStorage.getItem("daftar_karyawan");
         return data ? JSON.parse(data) : DEFAULT_KARYAWAN;
@@ -258,26 +253,23 @@
       }
 
       function saveAttendanceState(id, state) {
-        localStorage.setItem(`absensi_${id}`, JSON.stringify(state));
+        try {
+          localStorage.setItem(`absensi_${id}`, JSON.stringify(state));
+        } catch (e) {
+          console.warn("localStorage tidak bisa ditulis:", e);
+        }
       }
 
-      let today = new Date().toLocaleDateString("id-ID");
-      const idInput = document.getElementById("idKaryawan");
-      const idInfo = document.getElementById("idInfo");
-      const namaGroup = document.getElementById("namaGroup");
-      const namaInput = document.getElementById("nama");
-      const btnMasuk = document.getElementById("btnMasuk");
-      const btnPulang = document.getElementById("btnPulang");
-      const statusLokasi = document.getElementById("statusLokasi");
-      const detailLokasi = document.getElementById("detailLokasi");
-      const messageEl = document.getElementById("message");
+      function clearStateIfNewDay(id) {
+        const state = getAttendanceState(id);
+        if (state && state.date !== today) {
+          saveAttendanceState(id, null);
+          return null;
+        }
+        return state;
+      }
 
-      let currentPos = null;
-      let isInside = false;
-      let currentLocationName = null;
-      let currentKaryawan = null;
-      let watchId = null;
-
+      // ===== GEOLOCATION =====
       function haversineDistance(lat1, lon1, lat2, lon2) {
         const R = 6371000;
         const toRad = (deg) => (deg * Math.PI) / 180;
@@ -311,14 +303,15 @@
         const hasil = cekLokasiTerdekat(currentPos.lat, currentPos.lng);
         isInside = hasil.inside;
         currentLocationName = hasil.nama;
+
         if (isInside) {
           statusLokasi.textContent = `📍 Anda di dalam area ${hasil.nama}`;
           statusLokasi.style.color = "#16a34a";
-          detailLokasi.textContent = `Jarak: ${Math.round(hasil.jarak)} meter`;
+          detailLokasi.textContent = `Jarak: ${Math.round(hasil.jarak)} meter (diperbolehkan)`;
         } else {
           statusLokasi.textContent = "🚫 Anda di luar area kantor";
           statusLokasi.style.color = "#dc2626";
-          detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter`;
+          detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter (terlalu jauh)`;
           currentLocationName = null;
         }
         updateButtons();
@@ -350,6 +343,7 @@
         }
       }
 
+      // ===== LOGIKA ID & NAMA =====
       idInput.addEventListener("input", function () {
         const id = this.value.trim();
         const daftar = getDaftarKaryawan();
@@ -370,15 +364,7 @@
         }
       });
 
-      function clearStateIfNewDay(id) {
-        const state = getAttendanceState(id);
-        if (state && state.date !== today) {
-          saveAttendanceState(id, null);
-          return null;
-        }
-        return state;
-      }
-
+      // ===== UI BUTTONS =====
       function updateButtons() {
         if (!currentKaryawan) {
           btnMasuk.disabled = true;
@@ -390,8 +376,10 @@
           btnPulang.disabled = true;
           return;
         }
+
         const id = currentKaryawan.id;
         const state = clearStateIfNewDay(id) || {};
+
         if (
           !state.status ||
           state.status === "pulang" ||
@@ -402,10 +390,28 @@
         } else if (state.status === "masuk") {
           btnMasuk.disabled = true;
           btnPulang.disabled = false;
+        } else {
+          btnMasuk.disabled = true;
+          btnPulang.disabled = true;
         }
       }
 
-      async function absen(jenis) {
+      // ===== VALIDASI SERVER (JSONP) =====
+      function checkStatusFromServer(id, callback) {
+        const script = document.createElement("script");
+        script.src =
+          SCRIPT_URL + "?action=checkStatus&id=" + id + "&callback=" + callback;
+        script.onerror = function () {
+          showMessage("Gagal menghubungi server.", "error");
+        };
+        document.body.appendChild(script);
+        script.onload = function () {
+          document.body.removeChild(script);
+        };
+      }
+
+      // ===== FUNGSI ABSEN =====
+      function absen(jenis) {
         if (!currentKaryawan) {
           showMessage("Masukkan ID terlebih dahulu", "error");
           return;
@@ -418,15 +424,18 @@
         const id = currentKaryawan.id;
         const nama = currentKaryawan.nama;
 
-        // Panggil validasi server sebelum absen
+        // Simpan data sementara untuk callback
+        window._pendingAbsen = { jenis, id, nama };
         checkStatusFromServer(id, "handleStatusCheck");
-        window._pendingAbsen = { jenis, id, nama }; // simpan sementara
       }
 
-      // Callback dari validasi server
+      // Callback setelah pengecekan server
       function handleStatusCheck(response) {
+        if (!window._pendingAbsen) return;
         const { jenis, id, nama } = window._pendingAbsen;
-        if (!response || response.status === undefined) {
+        window._pendingAbsen = null;
+
+        if (!response || typeof response.status === "undefined") {
           showMessage("Gagal memvalidasi status, coba lagi.", "error");
           return;
         }
@@ -436,7 +445,6 @@
 
         if (jenis === "Masuk" && serverStatus === "masuk") {
           showMessage("Anda sudah absen masuk hari ini.", "info");
-          // update localStorage juga agar tombol sesuai
           saveAttendanceState(id, { status: "masuk", date: today });
           updateButtons();
           return;
@@ -452,11 +460,10 @@
           return;
         }
 
-        // Lolos validasi, lakukan pengiriman absen
+        // Lolos validasi, kirim data
         kirimAbsen(jenis, id, nama);
       }
 
-      // Fungsi pengiriman absen (sama seperti sebelumnya)
       async function kirimAbsen(jenis, id, nama) {
         try {
           showMessage("Mengirim data...", "info");
@@ -472,14 +479,7 @@
               lokasi: currentLocationName || "Tidak diketahui",
             }),
           });
-          try {
-            saveAttendanceState(id, {
-              status: jenis.toLowerCase(),
-              date: today,
-            });
-          } catch (lsError) {
-            console.warn("localStorage error:", lsError);
-          }
+          saveAttendanceState(id, { status: jenis.toLowerCase(), date: today });
           showMessage(`✅ Absen ${jenis} berhasil!`, "success");
           updateButtons();
         } catch (e) {
@@ -487,6 +487,7 @@
           console.error(e);
         }
       }
+
       function showMessage(text, type) {
         messageEl.textContent = text;
         messageEl.className = "message " + (type || "info");
@@ -495,8 +496,9 @@
         }, 5000);
       }
 
+      // ===== INISIALISASI =====
       startWatch();
-      updateButtons();
+      updateButtons(); // Panggil sekali di awal, tombol akan disable sampai ID dan lokasi OK
     </script>
   </body>
 </html>
