@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Laporan Absensi</title>
-    <!-- SheetJS CDN -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
       body {
@@ -67,7 +66,7 @@
   <body>
     <div class="container">
       <h1>📋 Laporan Absensi</h1>
-      <p class="subtitle">Data tanpa koordinat lokasi</p>
+      <p class="subtitle">Data tanpa koordinat lokasi (Waktu WIB)</p>
       <button class="btn" onclick="downloadExcel()">
         📥 Download Excel (.xlsx)
       </button>
@@ -76,17 +75,53 @@
 
     <script>
       const SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbyvwdHuFdh-I3-Olw_dniImZMy_9Iu6SIPnZyJBWen9gmlT556XzpI81V1d0kekZ_2c/exec"; // Ganti dengan URL Apps Script Anda
+        "https://script.google.com/macros/s/AKfycbyvwdHuFdh-I3-Olw_dniImZMy_9Iu6SIPnZyJBWen9gmlT556XzpI81V1d0kekZ_2c/exec"; // Ganti URL Anda
 
-      // JSONP: buat callback global
+      // Simpan data asli dan data yang sudah diformat
+      window.absensiDataOriginal = [];
+
+      // Format timestamp UTC ke WIB (dd-MM-yyyy HH:mm:ss)
+      function formatWIB(isoString) {
+        if (!isoString) return "";
+        const date = new Date(isoString);
+        // Konversi ke WIB (UTC+7)
+        const options = {
+          timeZone: "Asia/Jakarta",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        };
+        // Dapatkan string lokal sesuai opsi
+        const formatter = new Intl.DateTimeFormat("id-ID", options);
+        const parts = formatter.formatToParts(date);
+        const partValues = {};
+        parts.forEach((p) => {
+          if (p.type !== "literal") partValues[p.type] = p.value;
+        });
+        // Susun menjadi "dd-MM-yyyy HH:mm:ss"
+        return `${partValues.day}-${partValues.month}-${partValues.year} ${partValues.hour}:${partValues.minute}:${partValues.second}`;
+      }
+
+      // JSONP callback
       function handleData(data) {
-        window.absensiData = data;
-        if (data.length === 0) {
+        window.absensiDataOriginal = data; // simpan data mentah
+        // Proses data dengan format WIB
+        const formattedData = data.map((row) => ({
+          ...row,
+          Timestamp: formatWIB(row.Timestamp),
+        }));
+        window.absensiData = formattedData;
+
+        if (formattedData.length === 0) {
           document.getElementById("data-container").innerHTML =
             "<p>Tidak ada data absensi.</p>";
           return;
         }
-        renderTable(data);
+        renderTable(formattedData);
       }
 
       function fetchDataJSONP() {
@@ -102,7 +137,7 @@
       function renderTable(data) {
         let html = `<table>
         <thead><tr>
-          <th>Tanggal</th><th>ID</th><th>Nama</th><th>Jenis</th><th>Lokasi</th>
+          <th>Tanggal & Waktu (WIB)</th><th>ID</th><th>Nama</th><th>Jenis</th><th>Lokasi</th>
         </tr></thead><tbody>`;
         data.forEach((row) => {
           html += `<tr>
@@ -123,37 +158,34 @@
           return;
         }
 
-        // Siapkan data untuk SheetJS (array of object)
+        // Gunakan data yang sudah diformat (Timestamp WIB)
         const data = window.absensiData.map((row) => ({
-          Tanggal: row.Timestamp,
+          Tanggal: row.Timestamp, // sudah dalam format "dd-MM-yyyy HH:mm:ss"
           ID: row.ID,
           Nama: row.Nama,
           Jenis: row.Jenis,
           Lokasi: row.Lokasi,
         }));
 
-        // Buat workbook dan worksheet
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Absensi");
 
-        // Atur lebar kolom agar rapi (opsional)
+        // Atur lebar kolom
         ws["!cols"] = [
-          { wch: 20 }, // Tanggal
+          { wch: 22 }, // Tanggal
           { wch: 10 }, // ID
           { wch: 25 }, // Nama
           { wch: 10 }, // Jenis
           { wch: 30 }, // Lokasi
         ];
 
-        // Unduh file .xlsx
         XLSX.writeFile(
           wb,
           `laporan_absensi_${new Date().toISOString().slice(0, 10)}.xlsx`,
         );
       }
 
-      // Mulai ambil data dengan JSONP
       fetchDataJSONP();
     </script>
   </body>
