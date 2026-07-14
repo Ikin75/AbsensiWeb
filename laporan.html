@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Laporan Absensi</title>
+    <!-- SheetJS CDN -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
       body {
         font-family: "Segoe UI", sans-serif;
@@ -66,8 +68,8 @@
     <div class="container">
       <h1>📋 Laporan Absensi</h1>
       <p class="subtitle">Data tanpa koordinat lokasi</p>
-      <button class="btn" onclick="downloadCSV()">
-        📥 Download Excel (CSV)
+      <button class="btn" onclick="downloadExcel()">
+        📥 Download Excel (.xlsx)
       </button>
       <div id="data-container" class="loading">Memuat data...</div>
     </div>
@@ -115,21 +117,40 @@
         document.getElementById("data-container").innerHTML = html;
       }
 
-      function downloadCSV() {
+      function downloadExcel() {
         if (!window.absensiData || window.absensiData.length === 0) {
           alert("Tidak ada data untuk diunduh.");
           return;
         }
-        const rows = window.absensiData;
-        let csv = "Tanggal,ID,Nama,Jenis,Lokasi\n";
-        rows.forEach((r) => {
-          csv += `"${r.Timestamp}","${r.ID}","${r.Nama}","${r.Jenis}","${r.Lokasi}"\n`;
-        });
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `laporan_absensi_${new Date().toISOString().slice(0, 10)}.csv`;
-        link.click();
+
+        // Siapkan data untuk SheetJS (array of object)
+        const data = window.absensiData.map((row) => ({
+          Tanggal: row.Timestamp,
+          ID: row.ID,
+          Nama: row.Nama,
+          Jenis: row.Jenis,
+          Lokasi: row.Lokasi,
+        }));
+
+        // Buat workbook dan worksheet
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+
+        // Atur lebar kolom agar rapi (opsional)
+        ws["!cols"] = [
+          { wch: 20 }, // Tanggal
+          { wch: 10 }, // ID
+          { wch: 25 }, // Nama
+          { wch: 10 }, // Jenis
+          { wch: 30 }, // Lokasi
+        ];
+
+        // Unduh file .xlsx
+        XLSX.writeFile(
+          wb,
+          `laporan_absensi_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
       }
 
       // Mulai ambil data dengan JSONP
