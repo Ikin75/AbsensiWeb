@@ -3,500 +3,190 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Absensi Digital</title>
+    <title>Laporan Absensi</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
       body {
-        font-family: "Segoe UI", Roboto, sans-serif;
-        background: #f0f4f8;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
+        font-family: "Segoe UI", sans-serif;
         padding: 20px;
-        flex-direction: column;
+        background: #f8fafc;
       }
-      .card {
+      .container {
+        max-width: 900px;
+        margin: auto;
         background: white;
-        border-radius: 20px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-        padding: 30px;
-        width: 100%;
-        max-width: 400px;
-        text-align: center;
-      }
-      .logo-container {
-        margin-bottom: 5px;
-      }
-      .logo-container img {
-        max-width: 150px;
-        height: auto;
+        border-radius: 12px;
+        padding: 25px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
       }
       h1 {
         font-size: 24px;
         margin-bottom: 5px;
-        color: #1e293b;
       }
       .subtitle {
-        font-size: 14px;
         color: #64748b;
-        margin-bottom: 25px;
-      }
-      .status-box {
-        background: #f1f5f9;
-        border-radius: 12px;
-        padding: 15px;
         margin-bottom: 20px;
-      }
-      .status-text {
-        font-weight: 600;
-        font-size: 18px;
-        color: #0f172a;
-      }
-      .status-detail {
-        font-size: 13px;
-        color: #475569;
-        margin-top: 5px;
-      }
-      .input-group {
-        margin-bottom: 20px;
-        text-align: left;
-      }
-      .input-group label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: 500;
-        font-size: 14px;
-        color: #334155;
-      }
-      .input-group input {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e2e8f0;
-        border-radius: 10px;
-        font-size: 16px;
-        transition: 0.2s;
-      }
-      .input-group input:focus {
-        border-color: #3b82f6;
-        outline: none;
       }
       .btn {
-        width: 100%;
-        padding: 14px;
-        border: none;
-        border-radius: 12px;
-        font-size: 16px;
-        font-weight: 600;
-        color: white;
         background: #3b82f6;
-        cursor: pointer;
-        transition: 0.2s;
-        margin-bottom: 10px;
-      }
-      .btn:disabled {
-        background: #94a3b8;
-        cursor: not-allowed;
-      }
-      .btn-out {
-        background: #ef4444;
-      }
-      .btn-out:disabled {
-        background: #fca5a5;
-      }
-      .message {
-        margin-top: 15px;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 8px;
         font-size: 14px;
-        font-weight: 500;
+        cursor: pointer;
+        margin-bottom: 20px;
       }
-      .error {
-        color: #dc2626;
+      .btn:hover {
+        background: #2563eb;
       }
-      .success {
-        color: #16a34a;
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
       }
-      .info {
-        color: #2563eb;
+      th,
+      td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 14px;
       }
-      .id-info {
-        font-size: 13px;
-        color: #475569;
-        margin-top: 5px;
+      th {
+        background: #f1f5f9;
+        font-weight: 600;
       }
-      .footer {
-        margin-top: 20px;
-        font-size: 12px;
+      .loading {
+        text-align: center;
+        padding: 30px;
         color: #64748b;
       }
     </style>
   </head>
   <body>
-    <div class="card">
-      <div class="logo-container">
-        <img src="logo.png" alt="Logo Perusahaan" />
-      </div>
-      <h1>🏢 Absensi Digital</h1>
-      <div class="subtitle">Absen hanya bisa dilakukan di area kantor</div>
-
-      <div class="status-box">
-        <div class="status-text" id="statusLokasi">Mencari lokasi...</div>
-        <div class="status-detail" id="detailLokasi">
-          Mohon izinkan akses GPS
-        </div>
-      </div>
-
-      <div class="input-group">
-        <label for="idKaryawan">ID Karyawan</label>
-        <input
-          type="text"
-          id="idKaryawan"
-          placeholder="Masukkan ID Anda"
-          autocomplete="off"
-        />
-        <div class="id-info" id="idInfo"></div>
-      </div>
-
-      <div class="input-group" id="namaGroup" style="display: none">
-        <label for="nama">Nama Karyawan</label>
-        <input type="text" id="nama" placeholder="Nama Anda" readonly />
-      </div>
-
-      <button class="btn" id="btnMasuk" disabled onclick="absen('Masuk')">
-        ✅ Absen Masuk
+    <div class="container">
+      <h1>📋 Laporan Absensi</h1>
+      <p class="subtitle">Data tanpa koordinat lokasi (Waktu WIB)</p>
+      <button class="btn" onclick="downloadExcel()">
+        📥 Download Excel (.xlsx)
       </button>
-      <button
-        class="btn btn-out"
-        id="btnPulang"
-        disabled
-        onclick="absen('Pulang')"
-      >
-        🚪 Absen Pulang
-      </button>
-
-      <div class="message" id="message"></div>
-      <div class="footer">Created by SANTARA</div>
+      <div id="data-container" class="loading">Memuat data...</div>
     </div>
 
     <script>
-      // ===== KONFIGURASI =====
-      const OFFICE_LOCATIONS = [
-        {
-          nama: "BAT Singosari (utama)",
-          lat: -7.891745,
-          lng: 112.664147,
-          radius: 100,
-        },
-        {
-          nama: "BAT Singosari (area 2)",
-          lat: -7.872989,
-          lng: 112.6861417,
-          radius: 150,
-        },
-        { nama: "BAT Karanglo", lat: -7.916256, lng: 112.6533, radius: 100 },
-      ];
-
       const SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbzLNvs-0vvSmTriwkWMT7x7NYxvxYs284sj6825VQqXmCgn3qnvpMenT7NBwikWzJnE/exec";
+        "https://script.google.com/macros/s/AKfycbzLNvs-0vvSmTriwkWMT7x7NYxvxYs284sj6825VQqXmCgn3qnvpMenT7NBwikWzJnE/exec"; // Ganti URL Anda
 
-      const DEFAULT_KARYAWAN = [
-        { id: "MK001", nama: "dr. Hasniah, MKK" },
-        { id: "MK002", nama: "dr. Beta" },
-        { id: "MK003", nama: "Carolina" },
-        { id: "MK004", nama: "Arifka" },
-        { id: "MK005", nama: "Raidah" },
-        { id: "MK006", nama: "Anastacia" },
-        { id: "MK007", nama: "Ana" },
-        { id: "MK008", nama: "Faqih" },
-        { id: "MK009", nama: "Asvien" },
-        { id: "MK010", nama: "Winda" },
-      ];
+      // Simpan data asli dan data yang sudah diformat
+      window.absensiDataOriginal = [];
 
-      // ===== STATE =====
-      let currentPos = null;
-      let isInside = false;
-      let currentLocationName = null;
-      let currentKaryawan = null;
-      let watchId = null;
-      let today = new Date().toLocaleDateString("id-ID");
-
-      const idInput = document.getElementById("idKaryawan");
-      const idInfo = document.getElementById("idInfo");
-      const namaGroup = document.getElementById("namaGroup");
-      const namaInput = document.getElementById("nama");
-      const btnMasuk = document.getElementById("btnMasuk");
-      const btnPulang = document.getElementById("btnPulang");
-      const statusLokasi = document.getElementById("statusLokasi");
-      const detailLokasi = document.getElementById("detailLokasi");
-      const messageEl = document.getElementById("message");
-
-      // ===== LOCAL STORAGE =====
-      function getDaftarKaryawan() {
-        const data = localStorage.getItem("daftar_karyawan");
-        return data ? JSON.parse(data) : DEFAULT_KARYAWAN;
-      }
-      function simpanDaftarKaryawan(daftar) {
-        localStorage.setItem("daftar_karyawan", JSON.stringify(daftar));
-      }
-      if (!localStorage.getItem("daftar_karyawan")) {
-        simpanDaftarKaryawan(DEFAULT_KARYAWAN);
+      // Format timestamp UTC ke WIB (dd-MM-yyyy HH:mm:ss)
+      function formatWIB(isoString) {
+        if (!isoString) return "";
+        const date = new Date(isoString);
+        // Konversi ke WIB (UTC+7)
+        const options = {
+          timeZone: "Asia/Jakarta",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        };
+        // Dapatkan string lokal sesuai opsi
+        const formatter = new Intl.DateTimeFormat("id-ID", options);
+        const parts = formatter.formatToParts(date);
+        const partValues = {};
+        parts.forEach((p) => {
+          if (p.type !== "literal") partValues[p.type] = p.value;
+        });
+        // Susun menjadi "dd-MM-yyyy HH:mm:ss"
+        return `${partValues.day}-${partValues.month}-${partValues.year} ${partValues.hour}:${partValues.minute}:${partValues.second}`;
       }
 
-      function saveAttendanceState(id, state) {
-        try {
-          localStorage.setItem(`absensi_${id}`, JSON.stringify(state));
-        } catch (e) {}
-      }
-      function getAttendanceState(id) {
-        const data = localStorage.getItem(`absensi_${id}`);
-        return data ? JSON.parse(data) : null;
-      }
+      // JSONP callback
+      function handleData(data) {
+        window.absensiDataOriginal = data; // simpan data mentah
+        // Proses data dengan format WIB
+        const formattedData = data.map((row) => ({
+          ...row,
+          Timestamp: formatWIB(row.Timestamp),
+        }));
+        window.absensiData = formattedData;
 
-      // ===== GEOLOCATION =====
-      function haversineDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371000;
-        const toRad = (deg) => (deg * Math.PI) / 180;
-        const dLat = toRad(lat2 - lat1);
-        const dLon = toRad(lon2 - lon1);
-        const a =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos(toRad(lat1)) *
-            Math.cos(toRad(lat2)) *
-            Math.sin(dLon / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      }
-      function cekLokasiTerdekat(lat, lng) {
-        for (let lokasi of OFFICE_LOCATIONS) {
-          const jarak = haversineDistance(lat, lng, lokasi.lat, lokasi.lng);
-          if (jarak <= lokasi.radius)
-            return { nama: lokasi.nama, jarak, inside: true };
+        if (formattedData.length === 0) {
+          document.getElementById("data-container").innerHTML =
+            "<p>Tidak ada data absensi.</p>";
+          return;
         }
-        let minJarak = Infinity;
-        for (let lokasi of OFFICE_LOCATIONS) {
-          const jarak = haversineDistance(lat, lng, lokasi.lat, lokasi.lng);
-          if (jarak < minJarak) minJarak = jarak;
-        }
-        return { nama: null, jarak: minJarak, inside: false };
-      }
-      function updateLocation(pos) {
-        currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const hasil = cekLokasiTerdekat(currentPos.lat, currentPos.lng);
-        isInside = hasil.inside;
-        currentLocationName = hasil.nama;
-        if (isInside) {
-          statusLokasi.textContent = `📍 Anda di dalam area ${hasil.nama}`;
-          statusLokasi.style.color = "#16a34a";
-          detailLokasi.textContent = `Jarak: ${Math.round(hasil.jarak)} meter`;
-        } else {
-          statusLokasi.textContent = "🚫 Anda di luar area kantor";
-          statusLokasi.style.color = "#dc2626";
-          detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter`;
-          currentLocationName = null;
-        }
-        updateButtons();
-      }
-      function locationError(err) {
-        statusLokasi.textContent = "⚠️ Gagal mendapat lokasi";
-        statusLokasi.style.color = "#dc2626";
-        detailLokasi.textContent = err.message || "Periksa izin GPS";
-        isInside = false;
-        currentLocationName = null;
-        updateButtons();
-      }
-      function startWatch() {
-        if ("geolocation" in navigator) {
-          watchId = navigator.geolocation.watchPosition(
-            updateLocation,
-            locationError,
-            {
-              enableHighAccuracy: true,
-              maximumAge: 5000,
-              timeout: 10000,
-            },
-          );
-        } else {
-          statusLokasi.textContent = "❌ Browser tidak mendukung GPS";
-          statusLokasi.style.color = "#dc2626";
-        }
+        renderTable(formattedData);
       }
 
-      // ===== SINKRONISASI STATUS DARI SERVER =====
-      function syncStatusFromServer(id) {
-        showMessage("Memeriksa status...", "info");
-        checkStatusFromServer(id, "handleSyncStatus");
-      }
-      // JSONP helper
-      function checkStatusFromServer(id, callback) {
+      function fetchDataJSONP() {
         const script = document.createElement("script");
-        script.src =
-          SCRIPT_URL + "?action=checkStatus&id=" + id + "&callback=" + callback;
-        script.onerror = () => {
-          showMessage("Gagal menghubungi server.", "error");
-          // Jika gagal, gunakan localStorage sebagai fallback
-          updateButtonsFromLocal();
+        script.src = SCRIPT_URL + "?action=getData&callback=handleData";
+        script.onerror = function () {
+          document.getElementById("data-container").innerHTML =
+            '<p style="color:red;">Gagal memuat data.</p>';
         };
         document.body.appendChild(script);
-        script.onload = () => document.body.removeChild(script);
-      }
-      // Callback setelah cek status
-      function handleSyncStatus(response) {
-        if (!response || typeof response.status === "undefined") {
-          showMessage("Gagal memuat status, coba lagi.", "error");
-          updateButtonsFromLocal();
-          return;
-        }
-        const id = currentKaryawan ? currentKaryawan.id : null;
-        if (!id) return;
-        // Simpan status dari server ke localStorage
-        if (response.status === "masuk" || response.status === "pulang") {
-          saveAttendanceState(id, { status: response.status, date: today });
-        } else {
-          // Belum absen, hapus state
-          saveAttendanceState(id, null);
-        }
-        updateButtons();
-      }
-      // Fallback jika server tidak bisa dihubungi
-      function updateButtonsFromLocal() {
-        updateButtons();
       }
 
-      // ===== LOGIKA ID INPUT =====
-      idInput.addEventListener("input", function () {
-        const id = this.value.trim();
-        const daftar = getDaftarKaryawan();
-        const karyawan = daftar.find((k) => k.id === id);
-        if (karyawan) {
-          idInfo.textContent = `✅ Nama: ${karyawan.nama}`;
-          idInfo.style.color = "#16a34a";
-          namaInput.value = karyawan.nama;
-          namaGroup.style.display = "block";
-          currentKaryawan = karyawan;
-          // Sinkronkan status dari server
-          syncStatusFromServer(id);
-        } else {
-          idInfo.textContent = "ID tidak ditemukan";
-          idInfo.style.color = "#dc2626";
-          namaGroup.style.display = "none";
-          currentKaryawan = null;
-          updateButtons(); // disable tombol
-        }
-      });
+      function renderTable(data) {
+        let html = `<table>
+        <thead><tr>
+          <th>Tanggal & Waktu (WIB)</th><th>ID</th><th>Nama</th><th>Jenis</th><th>Lokasi</th>
+        </tr></thead><tbody>`;
+        data.forEach((row) => {
+          html += `<tr>
+          <td>${row.Timestamp}</td>
+          <td>${row.ID}</td>
+          <td>${row.Nama}</td>
+          <td>${row.Jenis}</td>
+          <td>${row.Lokasi}</td>
+        </tr>`;
+        });
+        html += "</tbody></table>";
+        document.getElementById("data-container").innerHTML = html;
+      }
 
-      // ===== UPDATE TOMBOL =====
-      function updateButtons() {
-        if (!currentKaryawan) {
-          btnMasuk.disabled = true;
-          btnPulang.disabled = true;
-          return;
-        }
-        if (!isInside) {
-          btnMasuk.disabled = true;
-          btnPulang.disabled = true;
+      function downloadExcel() {
+        if (!window.absensiData || window.absensiData.length === 0) {
+          alert("Tidak ada data untuk diunduh.");
           return;
         }
 
-        const id = currentKaryawan.id;
-        const state = getAttendanceState(id); // bisa null, atau {status, date}
-        const isToday = state && state.date === today;
-        const status = isToday ? state.status : null; // 'masuk', 'pulang', atau null
+        // Gunakan data yang sudah diformat (Timestamp WIB)
+        const data = window.absensiData.map((row) => ({
+          Tanggal: row.Timestamp, // sudah dalam format "dd-MM-yyyy HH:mm:ss"
+          ID: row.ID,
+          Nama: row.Nama,
+          Jenis: row.Jenis,
+          Lokasi: row.Lokasi,
+        }));
 
-        if (!status || status === "pulang") {
-          // Belum absen atau sudah pulang → bisa masuk
-          btnMasuk.disabled = false;
-          btnPulang.disabled = true;
-        } else if (status === "masuk") {
-          // Sudah masuk → bisa pulang
-          btnMasuk.disabled = true;
-          btnPulang.disabled = false;
-        } else {
-          btnMasuk.disabled = true;
-          btnPulang.disabled = true;
-        }
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+
+        // Atur lebar kolom
+        ws["!cols"] = [
+          { wch: 22 }, // Tanggal
+          { wch: 10 }, // ID
+          { wch: 25 }, // Nama
+          { wch: 10 }, // Jenis
+          { wch: 30 }, // Lokasi
+        ];
+
+        XLSX.writeFile(
+          wb,
+          `laporan_absensi_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
       }
 
-      // ===== ABSENSI =====
-      function absen(jenis) {
-        if (!currentKaryawan) {
-          showMessage("Masukkan ID", "error");
-          return;
-        }
-        if (!currentPos) {
-          showMessage("Lokasi belum tersedia", "error");
-          return;
-        }
-        const id = currentKaryawan.id;
-        const nama = currentKaryawan.nama;
-        window._pendingAbsen = { jenis, id, nama };
-        checkStatusFromServer(id, "handleAbsenValidation");
-      }
-      function handleAbsenValidation(response) {
-        if (!window._pendingAbsen) return;
-        const { jenis, id, nama } = window._pendingAbsen;
-        window._pendingAbsen = null;
-        if (!response || typeof response.status === "undefined") {
-          showMessage("Gagal validasi, coba lagi.", "error");
-          return;
-        }
-        const serverStatus = response.status; // 'masuk', 'pulang', 'belum'
-
-        if (jenis === "Masuk" && serverStatus === "masuk") {
-          showMessage("Anda sudah absen masuk hari ini.", "info");
-          saveAttendanceState(id, { status: "masuk", date: today });
-          updateButtons();
-          return;
-        }
-        if (jenis === "Pulang" && serverStatus === "pulang") {
-          showMessage("Anda sudah absen pulang hari ini.", "info");
-          saveAttendanceState(id, { status: "pulang", date: today });
-          updateButtons();
-          return;
-        }
-        if (jenis === "Pulang" && serverStatus !== "masuk") {
-          showMessage("Anda belum absen masuk, tidak bisa pulang.", "error");
-          return;
-        }
-        // Lolos, kirim data
-        kirimAbsen(jenis, id, nama);
-      }
-      async function kirimAbsen(jenis, id, nama) {
-        try {
-          showMessage("Mengirim data...", "info");
-          await fetch(SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            body: new URLSearchParams({
-              id: id,
-              nama: nama,
-              jenis: jenis,
-              lat: currentPos.lat,
-              lng: currentPos.lng,
-              lokasi: currentLocationName || "Tidak diketahui",
-            }),
-          });
-          // Setelah kirim, update localStorage
-          saveAttendanceState(id, { status: jenis.toLowerCase(), date: today });
-          showMessage(`✅ Absen ${jenis} berhasil!`, "success");
-          updateButtons();
-        } catch (e) {
-          showMessage("❌ Gagal mengirim data.", "error");
-        }
-      }
-
-      function showMessage(text, type) {
-        messageEl.textContent = text;
-        messageEl.className = "message " + (type || "info");
-        setTimeout(() => {
-          messageEl.textContent = "";
-        }, 5000);
-      }
-
-      // ===== INISIALISASI =====
-      startWatch();
-      updateButtons();
+      fetchDataJSONP();
     </script>
   </body>
 </html>
