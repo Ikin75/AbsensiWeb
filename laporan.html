@@ -74,23 +74,27 @@
 
     <script>
       const SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycby6lw-F3EYHCS3OEgff_q1jkouexBbg5QLwNXG7jOKeHFRZtOw01kTDjIcfuU3Xw7bO/exec"; // Ganti dgn URL GAS
+        "https://script.google.com/macros/s/AKfycbyvwdHuFdh-I3-Olw_dniImZMy_9Iu6SIPnZyJBWen9gmlT556XzpI81V1d0kekZ_2c/exec"; // Ganti dengan URL Apps Script Anda
 
-      async function fetchData() {
-        const container = document.getElementById("data-container");
-        try {
-          const res = await fetch(`${SCRIPT_URL}?action=getData`);
-          if (!res.ok) throw new Error("Gagal ambil data");
-          const data = await res.json();
-          if (data.length === 0) {
-            container.innerHTML = "<p>Tidak ada data absensi.</p>";
-            return;
-          }
-          renderTable(data);
-          window.absensiData = data; // simpan untuk CSV
-        } catch (e) {
-          container.innerHTML = `<p style="color:red;">Gagal memuat data: ${e.message}</p>`;
+      // JSONP: buat callback global
+      function handleData(data) {
+        window.absensiData = data;
+        if (data.length === 0) {
+          document.getElementById("data-container").innerHTML =
+            "<p>Tidak ada data absensi.</p>";
+          return;
         }
+        renderTable(data);
+      }
+
+      function fetchDataJSONP() {
+        const script = document.createElement("script");
+        script.src = SCRIPT_URL + "?action=getData&callback=handleData";
+        script.onerror = function () {
+          document.getElementById("data-container").innerHTML =
+            '<p style="color:red;">Gagal memuat data.</p>';
+        };
+        document.body.appendChild(script);
       }
 
       function renderTable(data) {
@@ -128,7 +132,8 @@
         link.click();
       }
 
-      fetchData();
+      // Mulai ambil data dengan JSONP
+      fetchDataJSONP();
     </script>
   </body>
 </html>
