@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Absensi Digital by ID</title>
+    <title>Absensi Digital</title>
     <style>
       * {
         box-sizing: border-box;
@@ -18,6 +18,7 @@
         justify-content: center;
         min-height: 100vh;
         padding: 20px;
+        flex-direction: column; /* agar footer bisa di bawah */
       }
       .card {
         background: white;
@@ -27,6 +28,14 @@
         width: 100%;
         max-width: 400px;
         text-align: center;
+        margin-top: 10px;
+      }
+      .logo-container {
+        margin-bottom: 5px;
+      }
+      .logo-container img {
+        max-width: 150px;
+        height: auto;
       }
       h1 {
         font-size: 24px;
@@ -122,10 +131,20 @@
       .hidden {
         display: none;
       }
+      .footer {
+        margin-top: 15px;
+        font-size: 12px;
+        color: #64748b;
+        text-align: center;
+      }
     </style>
   </head>
   <body>
     <div class="card">
+      <!-- Logo di atas -->
+      <div class="logo-container">
+        <img src="logo.png" alt="Logo Perusahaan" />
+      </div>
       <h1>🏢 Absensi Digital</h1>
       <div class="subtitle">Absen hanya bisa dilakukan di area kantor</div>
 
@@ -136,7 +155,6 @@
         </div>
       </div>
 
-      <!-- Input ID Karyawan -->
       <div class="input-group">
         <label for="idKaryawan">ID Karyawan</label>
         <input
@@ -148,7 +166,6 @@
         <div class="id-info" id="idInfo"></div>
       </div>
 
-      <!-- Nama akan muncul otomatis setelah ID valid, readonly -->
       <div class="input-group" id="namaGroup" style="display: none">
         <label for="nama">Nama Karyawan</label>
         <input type="text" id="nama" placeholder="Nama Anda" readonly />
@@ -167,14 +184,10 @@
       </button>
 
       <div class="message" id="message"></div>
+      <!-- Footer Created by SANTARA -->
+      <div class="footer">Created by SANTARA</div>
     </div>
-    <div style="text-align: center; margin-bottom: 15px">
-      <img
-        src="logo.png"
-        alt="Logo Perusahaan"
-        style="max-width: 150px; height: auto"
-      />
-    </div>
+
     <script>
       // ===== KONFIGURASI LOKASI =====
       const OFFICE_LOCATIONS = [
@@ -216,7 +229,6 @@
         { id: "MK010", nama: "Winda" },
       ];
 
-      // ===== FUNGSI KARYAWAN =====
       function getDaftarKaryawan() {
         const data = localStorage.getItem("daftar_karyawan");
         return data ? JSON.parse(data) : DEFAULT_KARYAWAN;
@@ -226,12 +238,10 @@
         localStorage.setItem("daftar_karyawan", JSON.stringify(daftar));
       }
 
-      // Inisialisasi jika belum ada
       if (!localStorage.getItem("daftar_karyawan")) {
         simpanDaftarKaryawan(DEFAULT_KARYAWAN);
       }
 
-      // State absensi per ID
       function getAttendanceState(id) {
         const data = localStorage.getItem(`absensi_${id}`);
         return data ? JSON.parse(data) : null;
@@ -242,8 +252,6 @@
       }
 
       let today = new Date().toLocaleDateString("id-ID");
-
-      // Elemen DOM
       const idInput = document.getElementById("idKaryawan");
       const idInfo = document.getElementById("idInfo");
       const namaGroup = document.getElementById("namaGroup");
@@ -257,10 +265,9 @@
       let currentPos = null;
       let isInside = false;
       let currentLocationName = null;
-      let currentKaryawan = null; // objek {id, nama} yang sedang aktif
+      let currentKaryawan = null;
       let watchId = null;
 
-      // ===== GEOLOCATION =====
       function haversineDistance(lat1, lon1, lat2, lon2) {
         const R = 6371000;
         const toRad = (deg) => (deg * Math.PI) / 180;
@@ -294,7 +301,6 @@
         const hasil = cekLokasiTerdekat(currentPos.lat, currentPos.lng);
         isInside = hasil.inside;
         currentLocationName = hasil.nama;
-
         if (isInside) {
           statusLokasi.textContent = `📍 Anda di dalam area ${hasil.nama}`;
           statusLokasi.style.color = "#16a34a";
@@ -334,7 +340,6 @@
         }
       }
 
-      // ===== LOGIKA ID & NAMA =====
       idInput.addEventListener("input", function () {
         const id = this.value.trim();
         const daftar = getDaftarKaryawan();
@@ -345,7 +350,6 @@
           namaInput.value = karyawan.nama;
           namaGroup.style.display = "block";
           currentKaryawan = karyawan;
-          // Reset tombol sesuai state ID ini
           updateButtons();
         } else {
           idInfo.textContent = "ID tidak ditemukan";
@@ -359,7 +363,7 @@
       function clearStateIfNewDay(id) {
         const state = getAttendanceState(id);
         if (state && state.date !== today) {
-          saveAttendanceState(id, null); // hapus state lama
+          saveAttendanceState(id, null);
           return null;
         }
         return state;
@@ -376,10 +380,8 @@
           btnPulang.disabled = true;
           return;
         }
-
         const id = currentKaryawan.id;
         const state = clearStateIfNewDay(id) || {};
-
         if (
           !state.status ||
           state.status === "pulang" ||
@@ -393,7 +395,6 @@
         }
       }
 
-      // ===== ABSEN =====
       async function absen(jenis) {
         if (!currentKaryawan) {
           showMessage("Masukkan ID terlebih dahulu", "error");
@@ -403,11 +404,9 @@
           showMessage("Lokasi belum tersedia", "error");
           return;
         }
-
         const id = currentKaryawan.id;
         const nama = currentKaryawan.nama;
         const state = clearStateIfNewDay(id) || {};
-
         if (
           jenis === "Masuk" &&
           state.status === "masuk" &&
@@ -424,12 +423,10 @@
           showMessage("Anda sudah absen pulang hari ini", "info");
           return;
         }
-
         try {
           showMessage("Mengirim data...", "info");
           await fetch(SCRIPT_URL, {
             method: "POST",
-            mode: "no-cors",
             body: new URLSearchParams({
               id: id,
               nama: nama,
@@ -439,8 +436,14 @@
               lokasi: currentLocationName || "Tidak diketahui",
             }),
           });
-          // Simpan state untuk ID ini
-          saveAttendanceState(id, { status: jenis.toLowerCase(), date: today });
+          try {
+            saveAttendanceState(id, {
+              status: jenis.toLowerCase(),
+              date: today,
+            });
+          } catch (lsError) {
+            console.warn("localStorage error:", lsError);
+          }
           showMessage(`✅ Absen ${jenis} berhasil!`, "success");
           updateButtons();
         } catch (e) {
@@ -457,10 +460,7 @@
         }, 5000);
       }
 
-      // Inisialisasi
       startWatch();
-      // Jika localStorage masih menyimpan ID terakhir? opsional, tidak perlu.
-      // Pastikan tombol awal disable
       updateButtons();
     </script>
   </body>
