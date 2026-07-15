@@ -90,10 +90,10 @@
         font-weight: 600;
       }
 
-      /* Kartu Status Hari Ini */
+      /* Kartu Status Terkini */
       .card-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
         gap: 16px;
         margin-top: 20px;
       }
@@ -108,7 +108,7 @@
       .status-card:hover {
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
       }
-      .status-card .badge {
+      .badge {
         display: inline-block;
         padding: 4px 12px;
         border-radius: 20px;
@@ -158,7 +158,7 @@
           📄 Riwayat
         </button>
         <button class="tab-btn" onclick="switchTab('today')">
-          📌 Status Hari Ini
+          📌 Status Terkini
         </button>
       </div>
 
@@ -170,8 +170,8 @@
           <div id="riwayat-container" class="loading">Memuat data...</div>
         </div>
         <div id="today-tab" style="display: none">
-          <button class="btn" onclick="downloadTodayExcel()">
-            📥 Download Status Hari Ini (.xlsx)
+          <button class="btn" onclick="downloadStatusExcel()">
+            📥 Download Status Terkini (.xlsx)
           </button>
           <div id="today-container" class="loading">Memuat data...</div>
         </div>
@@ -182,9 +182,8 @@
       const SCRIPT_URL =
         "https://script.google.com/macros/s/AKfycbzLNvs-0vvSmTriwkWMT7x7NYxvxYs284sj6825VQqXmCgn3qnvpMenT7NBwikWzJnE/exec"; // Ganti
 
-      // Data global
-      window.allData = []; // Data asli dari server
-      window.todaySummary = []; // Ringkasan hari ini
+      window.allData = [];
+      window.statusSummary = []; // untuk kartu status terkini
 
       // Format WIB (dd-MM-yyyy HH:mm:ss)
       function formatWIB(isoString) {
@@ -209,19 +208,7 @@
         return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}:${p.second}`;
       }
 
-      // Tanggal hari ini dalam format yyyy-MM-dd WIB
-      function getTodayWIB() {
-        const now = new Date();
-        const wib = new Date(
-          now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
-        );
-        const y = wib.getFullYear();
-        const m = String(wib.getMonth() + 1).padStart(2, "0");
-        const d = String(wib.getDate()).padStart(2, "0");
-        return `${y}-${m}-${d}`;
-      }
-
-      // JSONP
+      // Ambil semua data via JSONP
       function fetchDataJSONP() {
         const script = document.createElement("script");
         script.src = SCRIPT_URL + "?action=getData&callback=handleAllData";
@@ -237,7 +224,7 @@
       function handleAllData(data) {
         window.allData = data;
         buildRiwayat();
-        buildTodaySummary();
+        buildStatusSummary();
       }
 
       // ===== RIWAYAT (TABEL) =====
@@ -261,84 +248,118 @@
         container.innerHTML = html;
       }
 
-      // ===== STATUS HARI INI (KARTU) =====
-      function buildTodaySummary() {
+      // ===== STATUS TERKINI (berdasarkan pasangan Masuk-Pulang terakhir) =====
+      function buildStatusSummary() {
         const container = document.getElementById("today-container");
-        const today = getTodayWIB(); // yyyy-MM-dd
-        // Filter data hari ini
-        const todayData = window.allData.filter((row) => {
-          const dateStr = formatWIB(row.Timestamp).split(" ")[0]; // dd-MM-yyyy -> kita perlu balik ke yyyy-MM-dd untuk compare
-          // Konversi balik
-          const [d, m, y] = dateStr.split("-");
-          const rowDate = `${y}-${m}-${d}`;
-          return rowDate === today;
+        const data = window.allData;
+        if (!data || data.length === 0) {
+          container.innerHTML = "<p>Tidak ada data.</p>";
+          return;
+        }
+
+        // Urutkan seluruh data per ID berdasarkan Timestamp (paling awal ke akhir)
+        const grouped = {};
+        data.forEach((row) => {
+          const id = row.ID;
+          if (!grouped[id]) {
+            grouped[id] = { id: id, nama: row.Nama, records: [] };
+          }
+          grouped[id].records.push({
+            jenis: row.Jenis,
+            timestamp: new Date(row.Timestamp), // objek Date asli
+            lokasi: row.Lokasi,
+          });
         });
 
-        // Kelompokkan per ID
-        const map = {};
-        todayData.forEach((r) => {
-          const id = r.ID;
-          if (!map[id]) {
-            map[id] = {
-              id: id,
-              nama: r.Nama,
-              masuk: null,
-              pulang: null,
-              lokasiMasuk: "",
-              lokasiPulang: "",
-            };
-          }
-          if (r.Jenis === "Masuk") {
-            // ambil yang pertama kali (atau kita bisa ambil yang paling awal)
-            if (
-              !map[id].masuk ||
-              new Date(r.Timestamp) < new Date(map[id].masuk.timestamp)
-            ) {
-              map[id].masuk = {
-                waktu: formatWIB(r.Timestamp),
-                timestamp: r.Timestamp,
-                lokasi: r.Lokasi,
-              };
-            }
-          } else if (r.Jenis === "Pulang") {
-            if (
-              !map[id].pulang ||
-              new Date(r.Timestamp) > new Date(map[id].pulang.timestamp)
-            ) {
-              map[id].pulang = {
-                waktu: formatWIB(r.Timestamp),
-                timestamp: r.Timestamp,
-                lokasi: r.Lokasi,
-              };
-            }
-          }
-        });
+        // Untuk setiap karyawan, cari Masuk terakhir dan Pulang setelahnya
+        const summaries = [];
+        for (let [id, group] of Object.entries(grouped)) {
+          const records = group.records;
+          // Urutkan kronologis (seharusnya sudah, tapi jaga-jaga)
+          records.sort((a, b) => a.timestamp - b.timestamp);
 
-        const summaries = Object.values(map);
-        window.todaySummary = summaries;
+          let lastMasuk = null;
+          let lastPulang = null;
+          // Cari Masuk terakhir dan Pulang terakhir
+          for (let r of records) {
+            if (r.jenis === "Masuk") {
+              lastMasuk = r;
+            } else if (r.jenis === "Pulang") {
+              lastPulang = r;
+            }
+          }
+
+          let status = "none";
+          let jamMasuk = "-";
+          let lokasiMasuk = "-";
+          let jamPulang = "-";
+          let lokasiPulang = "-";
+
+          if (lastMasuk && lastPulang) {
+            // Ada keduanya. Jika Pulang terjadi setelah Masuk terakhir -> sudah pulang.
+            if (lastPulang.timestamp > lastMasuk.timestamp) {
+              status = "done";
+              jamMasuk = formatWIB(lastMasuk.timestamp);
+              lokasiMasuk = lastMasuk.lokasi;
+              jamPulang = formatWIB(lastPulang.timestamp);
+              lokasiPulang = lastPulang.lokasi;
+            } else {
+              // Pulang terakhir lebih awal dari Masuk terakhir (jarang, tapi jaga-jaga)
+              status = "working";
+              jamMasuk = formatWIB(lastMasuk.timestamp);
+              lokasiMasuk = lastMasuk.lokasi;
+            }
+          } else if (lastMasuk && !lastPulang) {
+            // Hanya ada Masuk
+            status = "working";
+            jamMasuk = formatWIB(lastMasuk.timestamp);
+            lokasiMasuk = lastMasuk.lokasi;
+          } else if (!lastMasuk && lastPulang) {
+            // Hanya ada Pulang (mungkin data historis yang kehapus masukannya)
+            status = "done";
+            jamPulang = formatWIB(lastPulang.timestamp);
+            lokasiPulang = lastPulang.lokasi;
+          } else {
+            status = "none";
+          }
+
+          summaries.push({
+            id: group.id,
+            nama: group.nama,
+            status: status,
+            masuk: status === "working" || status === "done" ? jamMasuk : null,
+            lokasiMasuk: lokasiMasuk,
+            pulang: status === "done" ? jamPulang : null,
+            lokasiPulang: lokasiPulang,
+          });
+        }
+
+        window.statusSummary = summaries;
 
         if (summaries.length === 0) {
-          container.innerHTML = "<p>Belum ada aktivitas absensi hari ini.</p>";
+          container.innerHTML = "<p>Tidak ada data karyawan.</p>";
           return;
         }
 
         let html = '<div class="card-grid">';
         summaries.forEach((s) => {
-          const status = s.pulang ? "done" : "working";
-          const statusText = s.pulang ? "Sudah Pulang" : "Sedang Bekerja";
-          const badgeClass = s.pulang ? "done" : "working";
-          const masukTime = s.masuk ? s.masuk.waktu : "-";
-          const masukLoc = s.masuk ? s.masuk.lokasi : "-";
-          const pulangTime = s.pulang ? s.pulang.waktu : "-";
-          const pulangLoc = s.pulang ? s.pulang.lokasi : "-";
+          let badgeClass = "none",
+            badgeText = "Belum ada data";
+          if (s.status === "working") {
+            badgeClass = "working";
+            badgeText = "Sedang Bekerja";
+          } else if (s.status === "done") {
+            badgeClass = "done";
+            badgeText = "Sudah Pulang";
+          }
 
           html += `
             <div class="status-card">
-                <span class="badge ${badgeClass}">${statusText}</span>
+                <span class="badge ${badgeClass}">${badgeText}</span>
                 <div class="card-name">${s.nama}</div>
                 <div class="card-id">ID: ${s.id}</div>
-                <div class="card-time"><span>🟢 Masuk:</span> ${masukTime} (${masukLoc})</div>
-                <div class="card-time"><span>🔴 Pulang:</span> ${pulangTime} ${s.pulang ? "(" + pulangLoc + ")" : ""}</div>
+                <div class="card-time"><span>🟢 Masuk:</span> ${s.masuk || "-"} ${s.masuk ? "(" + s.lokasiMasuk + ")" : ""}</div>
+                <div class="card-time"><span>🔴 Pulang:</span> ${s.pulang || "-"} ${s.pulang ? "(" + s.lokasiPulang + ")" : ""}</div>
             </div>`;
         });
         html += "</div>";
@@ -374,35 +395,40 @@
         );
       }
 
-      function downloadTodayExcel() {
-        if (!window.todaySummary || window.todaySummary.length === 0) {
-          alert("Tidak ada data hari ini.");
+      function downloadStatusExcel() {
+        if (!window.statusSummary || window.statusSummary.length === 0) {
+          alert("Tidak ada data status.");
           return;
         }
-        const data = window.todaySummary.map((s) => ({
+        const data = window.statusSummary.map((s) => ({
           ID: s.id,
           Nama: s.nama,
-          "Jam Masuk": s.masuk ? s.masuk.waktu : "-",
-          "Lokasi Masuk": s.masuk ? s.masuk.lokasi : "-",
-          "Jam Pulang": s.pulang ? s.pulang.waktu : "-",
-          "Lokasi Pulang": s.pulang ? s.pulang.lokasi : "-",
-          Status: s.pulang ? "Sudah Pulang" : "Sedang Bekerja",
+          Status:
+            s.status === "working"
+              ? "Sedang Bekerja"
+              : s.status === "done"
+                ? "Sudah Pulang"
+                : "Belum ada data",
+          "Jam Masuk": s.masuk || "-",
+          "Lokasi Masuk": s.lokasiMasuk || "-",
+          "Jam Pulang": s.pulang || "-",
+          "Lokasi Pulang": s.lokasiPulang || "-",
         }));
         const ws = XLSX.utils.json_to_sheet(data);
         ws["!cols"] = [
           { wch: 10 },
           { wch: 25 },
-          { wch: 22 },
-          { wch: 25 },
-          { wch: 22 },
-          { wch: 25 },
           { wch: 15 },
+          { wch: 22 },
+          { wch: 25 },
+          { wch: 22 },
+          { wch: 25 },
         ];
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Status Hari Ini");
+        XLSX.utils.book_append_sheet(wb, ws, "Status Terkini");
         XLSX.writeFile(
           wb,
-          `status_hari_ini_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          `status_terkini_${new Date().toISOString().slice(0, 10)}.xlsx`,
         );
       }
 
@@ -424,7 +450,6 @@
         }
       }
 
-      // ===== MULAI =====
       fetchDataJSONP();
     </script>
   </body>
