@@ -132,6 +132,68 @@
         font-size: 12px;
         color: #64748b;
       }
+
+      /* Modal Pop-up */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-overlay.active {
+        display: flex;
+      }
+      .modal-box {
+        background: white;
+        border-radius: 16px;
+        padding: 30px 20px;
+        max-width: 320px;
+        text-align: center;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.3s ease;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .modal-box h2 {
+        font-size: 20px;
+        margin-bottom: 10px;
+        color: #1e293b;
+      }
+      .modal-box p {
+        font-size: 15px;
+        color: #475569;
+        margin-bottom: 20px;
+      }
+      .modal-box button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .modal-box button.red {
+        background: #ef4444;
+      }
+      .modal-box button.gray {
+        background: #64748b;
+      }
     </style>
   </head>
   <body>
@@ -181,17 +243,26 @@
       <div class="footer">Created by SANTARA</div>
     </div>
 
+    <!-- Pop-up Modal -->
+    <div class="modal-overlay" id="popupModal">
+      <div class="modal-box">
+        <h2 id="popupTitle">Informasi</h2>
+        <p id="popupMessage"></p>
+        <button id="popupButton" onclick="closePopup()">OK</button>
+      </div>
+    </div>
+
     <script>
       // ===== KONFIGURASI =====
       const OFFICE_LOCATIONS = [
         {
-          nama: "BAT Singosari",
+          nama: "BAT Singosari (utama)",
           lat: -7.891745,
           lng: 112.664147,
           radius: 100,
         },
         {
-          nama: "BAT Singosari",
+          nama: "BAT Singosari (area 2)",
           lat: -7.872989,
           lng: 112.6861417,
           radius: 150,
@@ -203,12 +274,12 @@
         "https://script.google.com/macros/s/AKfycbzLNvs-0vvSmTriwkWMT7x7NYxvxYs284sj6825VQqXmCgn3qnvpMenT7NBwikWzJnE/exec";
 
       const DEFAULT_KARYAWAN = [
-        { id: "MK001", nama: "dr. Hasniah, MKK" },
-        { id: "MK002", nama: "dr. Beta" },
-        { id: "MK003", nama: "Carolina" },
-        { id: "MK004", nama: "Arifka" },
-        { id: "MK005", nama: "Raidah" },
-        { id: "MK006", nama: "Anastacia" },
+        { id: "MK001", nama: "dr. Hasniah Harun, MKK" },
+        { id: "MK002", nama: "dr. Beta Wahyudi" },
+        { id: "MK003", nama: "Caroline Didin Fitrikasari" },
+        { id: "MK004", nama: "Arifka Novi Pratiwi" },
+        { id: "MK005", nama: "Raidah Islami Zafir" },
+        { id: "MK006", nama: "Anastacia Evi Dwi Rusmiati" },
         { id: "MK007", nama: "Ana" },
         { id: "MK008", nama: "Faqih" },
         { id: "MK009", nama: "Asvien" },
@@ -232,6 +303,32 @@
       const statusLokasi = document.getElementById("statusLokasi");
       const detailLokasi = document.getElementById("detailLokasi");
       const messageEl = document.getElementById("message");
+
+      // ===== POPUP =====
+      const popupModal = document.getElementById("popupModal");
+      const popupTitle = document.getElementById("popupTitle");
+      const popupMessage = document.getElementById("popupMessage");
+      const popupButton = document.getElementById("popupButton");
+
+      function showPopup(title, message, buttonText = "OK", callback = null) {
+        popupTitle.textContent = title;
+        popupMessage.textContent = message;
+        popupButton.textContent = buttonText;
+        popupButton.className = "";
+        if (callback) {
+          popupButton.onclick = () => {
+            closePopup();
+            callback();
+          };
+        } else {
+          popupButton.onclick = closePopup;
+        }
+        popupModal.classList.add("active");
+      }
+
+      function closePopup() {
+        popupModal.classList.remove("active");
+      }
 
       // ===== LOCAL STORAGE =====
       function getDaftarKaryawan() {
@@ -325,24 +422,29 @@
 
       // ===== SINKRONISASI STATUS DARI SERVER =====
       function syncStatusFromServer(id) {
-        showMessage("Memeriksa status...", "info");
+        showPopup("Memeriksa Status", "Mohon tunggu sebentar...", "OK");
         checkStatusFromServer(id, "handleSyncStatus");
       }
-      // JSONP helper
+
       function checkStatusFromServer(id, callback) {
         const script = document.createElement("script");
         script.src =
           SCRIPT_URL + "?action=checkStatus&id=" + id + "&callback=" + callback;
         script.onerror = () => {
-          showMessage("Gagal menghubungi server.", "error");
-          // Jika gagal, gunakan localStorage sebagai fallback
+          // Gagal kontak server, fallback localStorage
+          closePopup();
+          showMessage(
+            "⚠️ Tidak dapat menghubungi server. Menggunakan data lokal.",
+            "error",
+          );
           updateButtonsFromLocal();
         };
         document.body.appendChild(script);
         script.onload = () => document.body.removeChild(script);
       }
-      // Callback setelah cek status
+
       function handleSyncStatus(response) {
+        closePopup(); // tutup popup "memeriksa"
         if (!response || typeof response.status === "undefined") {
           showMessage("Gagal memuat status, coba lagi.", "error");
           updateButtonsFromLocal();
@@ -350,16 +452,42 @@
         }
         const id = currentKaryawan ? currentKaryawan.id : null;
         if (!id) return;
-        // Simpan status dari server ke localStorage
-        if (response.status === "masuk" || response.status === "pulang") {
-          saveAttendanceState(id, { status: response.status, date: today });
+
+        const serverStatus = response.status; // 'masuk', 'pulang', 'belum'
+        // Simpan ke localStorage biar sinkron
+        if (serverStatus === "masuk" || serverStatus === "pulang") {
+          saveAttendanceState(id, { status: serverStatus, date: today });
         } else {
-          // Belum absen, hapus state
           saveAttendanceState(id, null);
         }
         updateButtons();
+
+        // Tampilkan pop-up status
+        if (currentKaryawan) {
+          const nama = currentKaryawan.nama;
+          if (serverStatus === "masuk") {
+            showPopup(
+              "Status Absensi",
+              `Anda (${nama}) sudah absen masuk hari ini. Silakan klik Absen Pulang jika sudah selesai bekerja.`,
+              "Mengerti",
+            );
+          } else if (serverStatus === "pulang") {
+            showPopup(
+              "Status Absensi",
+              `Anda (${nama}) sudah menyelesaikan absensi hari ini.`,
+              "OK",
+            );
+          } else {
+            // Belum absen
+            showPopup(
+              "Status Absensi",
+              `Anda (${nama}) belum absen. Silakan klik Absen Masuk.`,
+              "OK",
+            );
+          }
+        }
       }
-      // Fallback jika server tidak bisa dihubungi
+
       function updateButtonsFromLocal() {
         updateButtons();
       }
@@ -375,14 +503,14 @@
           namaInput.value = karyawan.nama;
           namaGroup.style.display = "block";
           currentKaryawan = karyawan;
-          // Sinkronkan status dari server
+          // Sinkronisasi status dari server sambil pop-up
           syncStatusFromServer(id);
         } else {
           idInfo.textContent = "ID tidak ditemukan";
           idInfo.style.color = "#dc2626";
           namaGroup.style.display = "none";
           currentKaryawan = null;
-          updateButtons(); // disable tombol
+          updateButtons();
         }
       });
 
@@ -400,16 +528,14 @@
         }
 
         const id = currentKaryawan.id;
-        const state = getAttendanceState(id); // bisa null, atau {status, date}
+        const state = getAttendanceState(id);
         const isToday = state && state.date === today;
-        const status = isToday ? state.status : null; // 'masuk', 'pulang', atau null
+        const status = isToday ? state.status : null;
 
         if (!status || status === "pulang") {
-          // Belum absen atau sudah pulang → bisa masuk
           btnMasuk.disabled = false;
           btnPulang.disabled = true;
         } else if (status === "masuk") {
-          // Sudah masuk → bisa pulang
           btnMasuk.disabled = true;
           btnPulang.disabled = false;
         } else {
@@ -430,38 +556,58 @@
         }
         const id = currentKaryawan.id;
         const nama = currentKaryawan.nama;
+        // Validasi server dulu
         window._pendingAbsen = { jenis, id, nama };
         checkStatusFromServer(id, "handleAbsenValidation");
       }
+
       function handleAbsenValidation(response) {
         if (!window._pendingAbsen) return;
         const { jenis, id, nama } = window._pendingAbsen;
         window._pendingAbsen = null;
         if (!response || typeof response.status === "undefined") {
-          showMessage("Gagal validasi, coba lagi.", "error");
+          showPopup(
+            "Error",
+            "Gagal memvalidasi status. Silakan coba lagi.",
+            "OK",
+          );
           return;
         }
-        const serverStatus = response.status; // 'masuk', 'pulang', 'belum'
+        const serverStatus = response.status;
 
         if (jenis === "Masuk" && serverStatus === "masuk") {
-          showMessage("Anda sudah absen masuk hari ini.", "info");
+          showPopup(
+            "Info",
+            `Anda (${nama}) sudah melakukan absen masuk hari ini. Silakan klik Absen Pulang.`,
+            "OK",
+          );
           saveAttendanceState(id, { status: "masuk", date: today });
           updateButtons();
           return;
         }
         if (jenis === "Pulang" && serverStatus === "pulang") {
-          showMessage("Anda sudah absen pulang hari ini.", "info");
+          showPopup(
+            "Info",
+            `Anda (${nama}) sudah melakukan absen pulang hari ini.`,
+            "OK",
+          );
           saveAttendanceState(id, { status: "pulang", date: today });
           updateButtons();
           return;
         }
         if (jenis === "Pulang" && serverStatus !== "masuk") {
-          showMessage("Anda belum absen masuk, tidak bisa pulang.", "error");
+          showPopup(
+            "Gagal",
+            "Anda belum absen masuk, tidak bisa pulang.",
+            "OK",
+          );
           return;
         }
+
         // Lolos, kirim data
         kirimAbsen(jenis, id, nama);
       }
+
       async function kirimAbsen(jenis, id, nama) {
         try {
           showMessage("Mengirim data...", "info");
@@ -477,12 +623,23 @@
               lokasi: currentLocationName || "Tidak diketahui",
             }),
           });
-          // Setelah kirim, update localStorage
           saveAttendanceState(id, { status: jenis.toLowerCase(), date: today });
-          showMessage(`✅ Absen ${jenis} berhasil!`, "success");
+          if (jenis === "Masuk") {
+            showPopup(
+              "Absen Berhasil",
+              `Selamat bekerja, ${nama}! Semoga lancar dan berkah hari ini.`,
+              "OK",
+            );
+          } else {
+            showPopup(
+              "Absen Berhasil",
+              "Hati-hati di jalan, sehat selalu.",
+              "OK",
+            );
+          }
           updateButtons();
         } catch (e) {
-          showMessage("❌ Gagal mengirim data.", "error");
+          showPopup("Gagal", "Gagal mengirim data. Silakan coba lagi.", "OK");
         }
       }
 
