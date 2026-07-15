@@ -72,6 +72,26 @@
         color: #64748b;
       }
 
+      /* Filter */
+      .filter-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+      .filter-row label {
+        font-weight: 600;
+        font-size: 14px;
+        color: #334155;
+      }
+      .filter-row select {
+        padding: 6px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 14px;
+        background: white;
+      }
+
       /* Tabel Riwayat */
       table {
         width: 100%;
@@ -90,7 +110,7 @@
         font-weight: 600;
       }
 
-      /* Kartu Status Terkini */
+      /* Kartu Status */
       .card-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -163,16 +183,31 @@
       </div>
 
       <div id="tab-content">
+        <!-- Riwayat Tab -->
         <div id="riwayat-tab">
           <button class="btn" onclick="downloadExcel()">
             📥 Download Riwayat (.xlsx)
           </button>
           <div id="riwayat-container" class="loading">Memuat data...</div>
         </div>
+
+        <!-- Status Terkini Tab -->
         <div id="today-tab" style="display: none">
-          <button class="btn" onclick="downloadStatusExcel()">
-            📥 Download Status Terkini (.xlsx)
-          </button>
+          <div class="filter-row">
+            <label for="statusFilter">Filter:</label>
+            <select id="statusFilter" onchange="applyFilter()">
+              <option value="all">Semua</option>
+              <option value="working">Sedang Bekerja</option>
+              <option value="done">Sudah Pulang</option>
+            </select>
+            <button
+              class="btn"
+              onclick="downloadStatusExcel()"
+              style="margin-bottom: 0; margin-left: auto"
+            >
+              📥 Download (.xlsx)
+            </button>
+          </div>
           <div id="today-container" class="loading">Memuat data...</div>
         </div>
       </div>
@@ -183,7 +218,7 @@
         "https://script.google.com/macros/s/AKfycbzLNvs-0vvSmTriwkWMT7x7NYxvxYs284sj6825VQqXmCgn3qnvpMenT7NBwikWzJnE/exec"; // Ganti
 
       window.allData = [];
-      window.statusSummary = []; // untuk kartu status terkini
+      window.statusSummary = []; // semua ringkasan (tanpa filter)
 
       // Format WIB (dd-MM-yyyy HH:mm:ss)
       function formatWIB(isoString) {
@@ -254,10 +289,11 @@
         const data = window.allData;
         if (!data || data.length === 0) {
           container.innerHTML = "<p>Tidak ada data.</p>";
+          window.statusSummary = [];
           return;
         }
 
-        // Urutkan seluruh data per ID berdasarkan Timestamp (paling awal ke akhir)
+        // Urutkan seluruh data per ID berdasarkan Timestamp
         const grouped = {};
         data.forEach((row) => {
           const id = row.ID;
@@ -266,7 +302,7 @@
           }
           grouped[id].records.push({
             jenis: row.Jenis,
-            timestamp: new Date(row.Timestamp), // objek Date asli
+            timestamp: new Date(row.Timestamp),
             lokasi: row.Lokasi,
           });
         });
@@ -275,18 +311,13 @@
         const summaries = [];
         for (let [id, group] of Object.entries(grouped)) {
           const records = group.records;
-          // Urutkan kronologis (seharusnya sudah, tapi jaga-jaga)
           records.sort((a, b) => a.timestamp - b.timestamp);
 
           let lastMasuk = null;
           let lastPulang = null;
-          // Cari Masuk terakhir dan Pulang terakhir
           for (let r of records) {
-            if (r.jenis === "Masuk") {
-              lastMasuk = r;
-            } else if (r.jenis === "Pulang") {
-              lastPulang = r;
-            }
+            if (r.jenis === "Masuk") lastMasuk = r;
+            else if (r.jenis === "Pulang") lastPulang = r;
           }
 
           let status = "none";
@@ -296,7 +327,6 @@
           let lokasiPulang = "-";
 
           if (lastMasuk && lastPulang) {
-            // Ada keduanya. Jika Pulang terjadi setelah Masuk terakhir -> sudah pulang.
             if (lastPulang.timestamp > lastMasuk.timestamp) {
               status = "done";
               jamMasuk = formatWIB(lastMasuk.timestamp);
@@ -304,18 +334,15 @@
               jamPulang = formatWIB(lastPulang.timestamp);
               lokasiPulang = lastPulang.lokasi;
             } else {
-              // Pulang terakhir lebih awal dari Masuk terakhir (jarang, tapi jaga-jaga)
               status = "working";
               jamMasuk = formatWIB(lastMasuk.timestamp);
               lokasiMasuk = lastMasuk.lokasi;
             }
           } else if (lastMasuk && !lastPulang) {
-            // Hanya ada Masuk
             status = "working";
             jamMasuk = formatWIB(lastMasuk.timestamp);
             lokasiMasuk = lastMasuk.lokasi;
           } else if (!lastMasuk && lastPulang) {
-            // Hanya ada Pulang (mungkin data historis yang kehapus masukannya)
             status = "done";
             jamPulang = formatWIB(lastPulang.timestamp);
             lokasiPulang = lastPulang.lokasi;
@@ -335,14 +362,32 @@
         }
 
         window.statusSummary = summaries;
+        applyFilter(); // render dengan filter aktif
+      }
 
-        if (summaries.length === 0) {
+      // ===== FILTER & RENDER KARTU =====
+      function applyFilter() {
+        const filter = document.getElementById("statusFilter")?.value || "all";
+        const container = document.getElementById("today-container");
+        if (!window.statusSummary || window.statusSummary.length === 0) {
           container.innerHTML = "<p>Tidak ada data karyawan.</p>";
           return;
         }
 
+        let filtered = window.statusSummary;
+        if (filter === "working") {
+          filtered = window.statusSummary.filter((s) => s.status === "working");
+        } else if (filter === "done") {
+          filtered = window.statusSummary.filter((s) => s.status === "done");
+        }
+
+        if (filtered.length === 0) {
+          container.innerHTML = "<p>Tidak ada data sesuai filter.</p>";
+          return;
+        }
+
         let html = '<div class="card-grid">';
-        summaries.forEach((s) => {
+        filtered.forEach((s) => {
           let badgeClass = "none",
             badgeText = "Belum ada data";
           if (s.status === "working") {
@@ -396,11 +441,22 @@
       }
 
       function downloadStatusExcel() {
-        if (!window.statusSummary || window.statusSummary.length === 0) {
-          alert("Tidak ada data status.");
+        const filter = document.getElementById("statusFilter")?.value || "all";
+        let dataToDownload = window.statusSummary;
+        if (filter === "working")
+          dataToDownload = window.statusSummary.filter(
+            (s) => s.status === "working",
+          );
+        else if (filter === "done")
+          dataToDownload = window.statusSummary.filter(
+            (s) => s.status === "done",
+          );
+
+        if (!dataToDownload || dataToDownload.length === 0) {
+          alert("Tidak ada data untuk diunduh.");
           return;
         }
-        const data = window.statusSummary.map((s) => ({
+        const data = dataToDownload.map((s) => ({
           ID: s.id,
           Nama: s.nama,
           Status:
@@ -447,6 +503,9 @@
         } else {
           document.querySelector(".tab-btn:last-child").classList.add("active");
           document.getElementById("today-tab").style.display = "block";
+          // Pastikan dropdown reset ke 'all' agar tampilan awal konsisten
+          document.getElementById("statusFilter").value = "all";
+          applyFilter();
         }
       }
 
