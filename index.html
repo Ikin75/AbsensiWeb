@@ -1,49 +1,324 @@
 <!doctype html>
-<html>
+<html lang="id">
   <head>
-    <!-- ... (CSS sama persis seperti sebelumnya) ... -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Absensi Digital</title>
+    <!-- HANYA SATU KALI LOAD SUPABASE -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  </head>
-  <body>
-    <!-- ... (HTML form sama persis seperti sebelumnya) ... -->
-
-    <script>
-      // ===== KONFIGURASI =====
-      const SUPABASE_URL = "https://rpyjrqviloxhsmykszox.supabase.co"; // <-- GANTI
-      const SUPABASE_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJweWpycXZpbG94aHNteWtzem94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMDUwNjEsImV4cCI6MjEwMDY4MTA2MX0.U07C-P84w-UfcdAd8ic2JjZHFPTTneiwSAIr7D4yG9o"; // <-- GANTI
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-      const OFFICE_LOCATIONS = [
-        // ... (data lokasi tetap seperti sebelumnya) ...
-      ];
-
-      // ... (fungsi geolocation, UI, dan popup tetap 100% sama) ...
-
-      // ===== FUNGSI DATABASE BARU =====
-
-      // Cek status karyawan berdasarkan data terakhir di Supabase
-      async function checkStatusFromDB(id) {
-        try {
-          // Ambil 1 record terbaru untuk user ini
-          const { data, error } = await supabase
-            .from("absensi")
-            .select("jenis")
-            .eq("id_karyawan", id)
-            .order("created_at", { ascending: false })
-            .limit(1);
-
-          if (error) throw error;
-
-          // Kalau data ada, return jenisnya ('Masuk'/'Pulang'), kalau tidak 'belum'
-          return data.length > 0 ? data[0].jenis.toLowerCase() : "belum";
-        } catch (e) {
-          console.error(e);
-          return "error";
-        }
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Segoe UI", Roboto, sans-serif;
+        background: #f0f4f8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+        flex-direction: column;
+      }
+      .card {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+      }
+      .logo-container {
+        margin-bottom: 5px;
+      }
+      .logo-container img {
+        max-width: 150px;
+        height: auto;
+      }
+      h1 {
+        font-size: 24px;
+        margin-bottom: 5px;
+        color: #1e293b;
+      }
+      .subtitle {
+        font-size: 14px;
+        color: #64748b;
+        margin-bottom: 25px;
+      }
+      .status-box {
+        background: #f1f5f9;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+      .status-text {
+        font-weight: 600;
+        font-size: 18px;
+        color: #0f172a;
+      }
+      .status-detail {
+        font-size: 13px;
+        color: #475569;
+        margin-top: 5px;
+      }
+      .input-group {
+        margin-bottom: 20px;
+        text-align: left;
+      }
+      .input-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        font-size: 14px;
+        color: #334155;
+      }
+      .input-group input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 16px;
+        transition: 0.2s;
+      }
+      .input-group input:focus {
+        border-color: #3b82f6;
+        outline: none;
+      }
+      .btn {
+        width: 100%;
+        padding: 14px;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        color: white;
+        background: #3b82f6;
+        cursor: pointer;
+        transition: 0.2s;
+        margin-bottom: 10px;
+      }
+      .btn:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+      .btn-out {
+        background: #ef4444;
+      }
+      .btn-out:disabled {
+        background: #fca5a5;
+      }
+      .message {
+        margin-top: 15px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .error {
+        color: #dc2626;
+      }
+      .success {
+        color: #16a34a;
+      }
+      .info {
+        color: #2563eb;
+      }
+      .id-info {
+        font-size: 13px;
+        color: #475569;
+        margin-top: 5px;
+      }
+      .footer {
+        margin-top: 20px;
+        font-size: 12px;
+        color: #64748b;
       }
 
-      // Simpan record absen
+      /* Modal Pop-up */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-overlay.active {
+        display: flex;
+      }
+      .modal-box {
+        background: white;
+        border-radius: 16px;
+        padding: 30px 20px;
+        max-width: 320px;
+        text-align: center;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.3s ease;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .modal-box h2 {
+        font-size: 20px;
+        margin-bottom: 10px;
+        color: #1e293b;
+      }
+      .modal-box p {
+        font-size: 15px;
+        color: #475569;
+        margin-bottom: 20px;
+      }
+      .modal-box button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo-container">
+        <img src="logo.png" alt="Logo Perusahaan" />
+      </div>
+      <h1>🏢 Absensi Digital</h1>
+      <div class="subtitle">Absen hanya bisa dilakukan di area kantor</div>
+
+      <div class="status-box">
+        <div class="status-text" id="statusLokasi">Mencari lokasi...</div>
+        <div class="status-detail" id="detailLokasi">
+          Mohon izinkan akses GPS
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label for="idKaryawan">ID Karyawan</label>
+        <input
+          type="text"
+          id="idKaryawan"
+          placeholder="Masukkan ID Anda"
+          autocomplete="off"
+        />
+        <div class="id-info" id="idInfo"></div>
+      </div>
+
+      <div class="input-group" id="namaGroup" style="display: none">
+        <label for="nama">Nama Karyawan</label>
+        <input type="text" id="nama" placeholder="Nama Anda" readonly />
+      </div>
+
+      <button class="btn" id="btnMasuk" disabled onclick="absen('Masuk')">
+        ✅ Absen Masuk
+      </button>
+      <button
+        class="btn btn-out"
+        id="btnPulang"
+        disabled
+        onclick="absen('Pulang')"
+      >
+        🚪 Absen Pulang
+      </button>
+
+      <div class="message" id="message"></div>
+      <div class="footer">Created by SANTARA</div>
+    </div>
+
+    <!-- Pop-up Modal -->
+    <div class="modal-overlay" id="popupModal">
+      <div class="modal-box">
+        <h2 id="popupTitle">Informasi</h2>
+        <p id="popupMessage"></p>
+        <button id="popupButton" onclick="closePopup()">OK</button>
+      </div>
+    </div>
+
+    <script>
+      // ===== KONFIGURASI SUPABASE =====
+      const SUPABASE_URL = "https://rpyjrqviloxhsmykszox.supabase.co"; // GANTI
+      const SUPABASE_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJweWpycXZpbG94aHNteWtzem94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMDUwNjEsImV4cCI6MjEwMDY4MTA2MX0.U07C-P84w-UfcdAd8ic2JjZHFPTTneiwSAIr7D4yG9o"; // GANTI (anon key)
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      // ===== KONFIGURASI LOKASI =====
+      const OFFICE_LOCATIONS = [
+        {
+          nama: "BAT Singosari (utama)",
+          lat: -7.891745,
+          lng: 112.664147,
+          radius: 100,
+        },
+        {
+          nama: "BAT Singosari (area 2)",
+          lat: -7.872989,
+          lng: 112.6861417,
+          radius: 150,
+        },
+        { nama: "BAT Karanglo", lat: -7.916256, lng: 112.6533, radius: 100 },
+      ];
+
+      // ===== STATE =====
+      let currentPos = null;
+      let isInside = false;
+      let currentLocationName = null;
+      let currentKaryawan = null;
+      let watchId = null;
+      let today = new Date().toLocaleDateString("id-ID");
+
+      const idInput = document.getElementById("idKaryawan");
+      const idInfo = document.getElementById("idInfo");
+      const namaGroup = document.getElementById("namaGroup");
+      const namaInput = document.getElementById("nama");
+      const btnMasuk = document.getElementById("btnMasuk");
+      const btnPulang = document.getElementById("btnPulang");
+      const statusLokasi = document.getElementById("statusLokasi");
+      const detailLokasi = document.getElementById("detailLokasi");
+      const messageEl = document.getElementById("message");
+
+      // Daftar karyawan dari Supabase (cache di localStorage)
+      async function getDaftarKaryawan() {
+        const cached = localStorage.getItem("daftar_karyawan");
+        if (cached) return JSON.parse(cached);
+        const { data, error } = await supabase.from("karyawan").select("*");
+        if (error) {
+          console.error(error);
+          return [];
+        }
+        localStorage.setItem("daftar_karyawan", JSON.stringify(data));
+        return data;
+      }
+
+      // Status absensi terbaru dari Supabase
+      async function checkStatusFromDB(id) {
+        const { data, error } = await supabase
+          .from("absensi")
+          .select("jenis")
+          .eq("id_karyawan", id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (error) {
+          console.error(error);
+          return "error";
+        }
+        return data.length > 0 ? data[0].jenis.toLowerCase() : "belum";
+      }
+
+      // Simpan absensi
       async function simpanKeDB(id, nama, jenis, lat, lng, lokasi) {
         const { error } = await supabase.from("absensi").insert({
           id_karyawan: id,
@@ -56,64 +331,190 @@
         if (error) throw error;
       }
 
-      // ===== MODIFIKASI FUNGSI ABSEN =====
+      // ===== GEOLOCATION =====
+      function haversineDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const toRad = (deg) => (deg * Math.PI) / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat1)) *
+            Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      function cekLokasiTerdekat(lat, lng) {
+        for (let lokasi of OFFICE_LOCATIONS) {
+          const jarak = haversineDistance(lat, lng, lokasi.lat, lokasi.lng);
+          if (jarak <= lokasi.radius)
+            return { nama: lokasi.nama, jarak, inside: true };
+        }
+        let minJarak = Infinity;
+        for (let lokasi of OFFICE_LOCATIONS) {
+          const jarak = haversineDistance(lat, lng, lokasi.lat, lokasi.lng);
+          if (jarak < minJarak) minJarak = jarak;
+        }
+        return { nama: null, jarak: minJarak, inside: false };
+      }
+
+      function updateLocation(pos) {
+        currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const hasil = cekLokasiTerdekat(currentPos.lat, currentPos.lng);
+        isInside = hasil.inside;
+        currentLocationName = hasil.nama;
+        if (isInside) {
+          statusLokasi.textContent = `📍 Anda di dalam area ${hasil.nama}`;
+          statusLokasi.style.color = "#16a34a";
+          detailLokasi.textContent = `Jarak: ${Math.round(hasil.jarak)} meter`;
+        } else {
+          statusLokasi.textContent = "🚫 Anda di luar area kantor";
+          statusLokasi.style.color = "#dc2626";
+          detailLokasi.textContent = `Jarak ke lokasi terdekat: ${Math.round(hasil.jarak)} meter`;
+          currentLocationName = null;
+        }
+        updateButtons();
+      }
+
+      function locationError(err) {
+        statusLokasi.textContent = "⚠️ Gagal mendapat lokasi";
+        statusLokasi.style.color = "#dc2626";
+        detailLokasi.textContent = err.message || "Periksa izin GPS";
+        isInside = false;
+        currentLocationName = null;
+        updateButtons();
+      }
+
+      function startWatch() {
+        if ("geolocation" in navigator) {
+          watchId = navigator.geolocation.watchPosition(
+            updateLocation,
+            locationError,
+            {
+              enableHighAccuracy: true,
+              maximumAge: 5000,
+              timeout: 10000,
+            },
+          );
+        } else {
+          statusLokasi.textContent = "❌ Browser tidak mendukung GPS";
+          statusLokasi.style.color = "#dc2626";
+        }
+      }
+
+      // ===== UI LOGIC =====
+      idInput.addEventListener("input", async function () {
+        const id = this.value.trim().toUpperCase();
+        const daftar = await getDaftarKaryawan();
+        const karyawan = daftar.find((k) => k.id_karyawan === id);
+        if (karyawan) {
+          idInfo.textContent = `✅ Nama: ${karyawan.nama}`;
+          idInfo.style.color = "#16a34a";
+          namaInput.value = karyawan.nama;
+          namaGroup.style.display = "block";
+          currentKaryawan = karyawan;
+          // Cek status langsung dari DB
+          const status = await checkStatusFromDB(id);
+          if (status === "masuk") {
+            showPopup(
+              "Status",
+              `Anda (${karyawan.nama}) sudah absen masuk. Silakan absen pulang.`,
+            );
+            btnMasuk.disabled = true;
+            btnPulang.disabled = !isInside;
+          } else {
+            showPopup("Status", `Silakan absen masuk.`);
+            btnMasuk.disabled = !isInside;
+            btnPulang.disabled = true;
+          }
+        } else {
+          idInfo.textContent = "ID tidak ditemukan";
+          idInfo.style.color = "#dc2626";
+          namaGroup.style.display = "none";
+          currentKaryawan = null;
+          btnMasuk.disabled = true;
+          btnPulang.disabled = true;
+        }
+      });
+
+      function updateButtons() {
+        // Tombol hanya diupdate setelah cek lokasi dan status
+        if (!currentKaryawan || !isInside) {
+          btnMasuk.disabled = true;
+          btnPulang.disabled = true;
+        }
+      }
+
+      // ===== ABSENSI =====
       async function absen(jenis) {
-        // ... (validasi lokasi & karyawan tetap sama) ...
-
-        showPopup("Memeriksa Status", "Menghubungi server...");
-
-        const serverStatus = await checkStatusFromDB(currentKaryawan.id);
-
-        if (serverStatus === "error") {
-          showPopup("Error", "Gagal memvalidasi. Coba lagi.");
+        if (!currentKaryawan) {
+          showPopup("Error", "Masukkan ID terlebih dahulu.");
+          return;
+        }
+        if (!currentPos) {
+          showPopup("Error", "Lokasi belum tersedia.");
           return;
         }
 
-        if (jenis === "Masuk" && serverStatus === "masuk") {
+        const id = currentKaryawan.id_karyawan;
+        const nama = currentKaryawan.nama;
+
+        showPopup("Memeriksa", "Mengecek status...");
+        const status = await checkStatusFromDB(id);
+
+        if (jenis === "Masuk" && status === "masuk") {
           showPopup("Gagal", "Anda sudah absen masuk.");
           return;
         }
-        if (jenis === "Pulang" && serverStatus !== "masuk") {
+        if (jenis === "Pulang" && status !== "masuk") {
           showPopup("Gagal", "Anda belum absen masuk.");
           return;
         }
 
-        // Lolos, simpan ke DB!
         try {
           showPopup("Mengirim", "Menyimpan data...");
           await simpanKeDB(
-            currentKaryawan.id,
-            currentKaryawan.nama,
+            id,
+            nama,
             jenis,
             currentPos.lat,
             currentPos.lng,
             currentLocationName,
           );
-          showPopup(
-            "Berhasil",
-            jenis === "Masuk"
-              ? `Selamat bekerja, ${currentKaryawan.nama}!`
-              : "Hati-hati di jalan!",
-          );
-          updateButtons(); // Update UI
+          if (jenis === "Masuk") {
+            showPopup("Sukses", `Selamat bekerja, ${nama}!`);
+            btnMasuk.disabled = true;
+            btnPulang.disabled = false;
+          } else {
+            showPopup("Sukses", "Hati-hati di jalan, sehat selalu.");
+            btnMasuk.disabled = false;
+            btnPulang.disabled = true;
+          }
         } catch (e) {
-          showPopup("Gagal", "Simpan gagal. Coba lagi.");
+          showPopup("Error", "Gagal menyimpan data. Coba lagi.");
+          console.error(e);
         }
       }
 
-      // ===== MODIFIKASI SINKRONISASI AWAL =====
-      async function syncStatus(id) {
-        const status = await checkStatusFromDB(id);
-        if (status === "masuk") {
-          showPopup("Status", "Anda sudah absen masuk. Silakan pulang.");
-          btnMasuk.disabled = true;
-          btnPulang.disabled = false;
-        } else {
-          showPopup("Status", "Silakan absen masuk.");
-          btnMasuk.disabled = false;
-          btnPulang.disabled = true;
-        }
+      // ===== POPUP =====
+      const popupModal = document.getElementById("popupModal");
+      const popupTitle = document.getElementById("popupTitle");
+      const popupMessage = document.getElementById("popupMessage");
+
+      function showPopup(title, message) {
+        popupTitle.textContent = title;
+        popupMessage.textContent = message;
+        popupModal.classList.add("active");
       }
+
+      function closePopup() {
+        popupModal.classList.remove("active");
+      }
+
+      // ===== START =====
+      startWatch();
+      updateButtons();
     </script>
   </body>
 </html>
