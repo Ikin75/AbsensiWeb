@@ -1,10 +1,9 @@
 <!doctype html>
-<html lang="id">
+<html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Laporan Absensi</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
       * {
@@ -73,12 +72,12 @@
         color: #64748b;
       }
 
+      /* Filter */
       .filter-row {
         display: flex;
         align-items: center;
         gap: 10px;
         margin-bottom: 15px;
-        flex-wrap: wrap;
       }
       .filter-row label {
         font-weight: 600;
@@ -93,6 +92,7 @@
         background: white;
       }
 
+      /* Tabel Riwayat */
       table {
         width: 100%;
         border-collapse: collapse;
@@ -110,6 +110,7 @@
         font-weight: 600;
       }
 
+      /* Kartu Status */
       .card-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -123,14 +124,9 @@
         padding: 16px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         transition: 0.2s;
-        position: relative;
       }
       .status-card:hover {
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-      }
-      .status-card.warning {
-        background: #fff8e1;
-        border-color: #f59e0b;
       }
       .badge {
         display: inline-block;
@@ -148,9 +144,9 @@
         background: #fee2e2;
         color: #dc2626;
       }
-      .badge.warning-badge {
-        background: #fef3c7;
-        color: #92400e;
+      .badge.none {
+        background: #f1f5f9;
+        color: #64748b;
       }
       .card-name {
         font-size: 16px;
@@ -170,26 +166,12 @@
       .card-time span {
         color: #475569;
       }
-      .wa-btn {
-        display: inline-block;
-        background: #25d366;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 600;
-        text-decoration: none;
-        margin-top: 8px;
-      }
-      .wa-btn:hover {
-        background: #1ebc57;
-      }
     </style>
   </head>
   <body>
     <div class="container">
       <h1>📋 Laporan Absensi</h1>
-      <p class="subtitle">Data langsung dari database (WIB)</p>
+      <p class="subtitle">Data waktu WIB</p>
 
       <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('riwayat')">
@@ -201,12 +183,15 @@
       </div>
 
       <div id="tab-content">
+        <!-- Riwayat Tab -->
         <div id="riwayat-tab">
           <button class="btn" onclick="downloadExcel()">
             📥 Download Riwayat (.xlsx)
           </button>
           <div id="riwayat-container" class="loading">Memuat data...</div>
         </div>
+
+        <!-- Status Terkini Tab -->
         <div id="today-tab" style="display: none">
           <div class="filter-row">
             <label for="statusFilter">Filter:</label>
@@ -229,19 +214,13 @@
     </div>
 
     <script>
-      // ===== SUPABASE CONFIG =====
-      const SUPABASE_URL = "https://rpyjrqviloxhsmykszox.supabase.co";
-      const SUPABASE_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJweWpycXZpbG94aHNteWtzem94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMDUwNjEsImV4cCI6MjEwMDY4MTA2MX0.U07C-P84w-UfcdAd8ic2JjZHFPTTneiwSAIr7D4yG9o";
-      const supabaseClient = window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_KEY,
-      );
+      const SCRIPT_URL =
+        "https://script.google.com/macros/s/AKfycbzLNvs-0vvSmTriwkWMT7x7NYxvxYs284sj6825VQqXmCgn3qnvpMenT7NBwikWzJnE/exec"; // Ganti
 
-      let allData = [];
-      let karyawanData = []; // untuk mendapatkan no_wa
+      window.allData = [];
+      window.statusSummary = []; // semua ringkasan (tanpa filter)
 
-      // ===== HELPER WIB =====
+      // Format WIB (dd-MM-yyyy HH:mm:ss)
       function formatWIB(isoString) {
         if (!isoString) return "";
         const date = new Date(isoString);
@@ -264,155 +243,143 @@
         return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}:${p.second}`;
       }
 
-      function getCurrentWIB() {
-        const now = new Date();
-        const wib = new Date(
-          now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
-        );
-        return wib;
-      }
-
-      // ===== FETCH DATA =====
-      async function fetchData() {
-        try {
-          // Ambil semua data absensi dan karyawan
-          const [absensiRes, karyawanRes] = await Promise.all([
-            supabaseClient
-              .from("absensi")
-              .select("*")
-              .order("created_at", { ascending: true }),
-            supabaseClient.from("karyawan").select("*"),
-          ]);
-          if (absensiRes.error) throw absensiRes.error;
-          if (karyawanRes.error) throw karyawanRes.error;
-
-          allData = absensiRes.data || [];
-          karyawanData = karyawanRes.data || [];
-
-          buildRiwayat();
-          buildStatusSummary();
-        } catch (e) {
+      // Ambil semua data via JSONP
+      function fetchDataJSONP() {
+        const script = document.createElement("script");
+        script.src = SCRIPT_URL + "?action=getData&callback=handleAllData";
+        script.onerror = () => {
           document.getElementById("riwayat-container").innerHTML =
-            `<p style="color:red;">Gagal memuat data: ${e.message}</p>`;
+            '<p style="color:red;">Gagal memuat data.</p>';
           document.getElementById("today-container").innerHTML =
-            `<p style="color:red;">Gagal memuat data.</p>`;
-          console.error(e);
-        }
+            '<p style="color:red;">Gagal memuat data.</p>';
+        };
+        document.body.appendChild(script);
       }
 
-      // ===== RIWAYAT =====
+      function handleAllData(data) {
+        window.allData = data;
+        buildRiwayat();
+        buildStatusSummary();
+      }
+
+      // ===== RIWAYAT (TABEL) =====
       function buildRiwayat() {
         const container = document.getElementById("riwayat-container");
-        if (allData.length === 0) {
-          container.innerHTML = "<p>Tidak ada data.</p>";
+        if (!window.allData || window.allData.length === 0) {
+          container.innerHTML = "<p>Tidak ada data absensi.</p>";
           return;
         }
+        const formatted = window.allData.map((row) => ({
+          ...row,
+          Tanggal: formatWIB(row.Timestamp),
+        }));
         let html = `<table><thead><tr>
-            <th>Tanggal & Waktu (WIB)</th><th>ID</th><th>Nama</th><th>Jenis</th><th>Lokasi</th>
+            <th>Tanggal & Waktu</th><th>ID</th><th>Nama</th><th>Jenis</th><th>Lokasi</th>
         </tr></thead><tbody>`;
-        allData.forEach((r) => {
-          html += `<tr><td>${formatWIB(r.created_at)}</td><td>${r.id_karyawan}</td><td>${r.nama}</td><td>${r.jenis}</td><td>${r.lokasi}</td></tr>`;
+        formatted.forEach((r) => {
+          html += `<tr><td>${r.Tanggal}</td><td>${r.ID}</td><td>${r.Nama}</td><td>${r.Jenis}</td><td>${r.Lokasi}</td></tr>`;
         });
         html += "</tbody></table>";
         container.innerHTML = html;
       }
 
-      // ===== STATUS TERKINI =====
+      // ===== STATUS TERKINI (berdasarkan pasangan Masuk-Pulang terakhir) =====
       function buildStatusSummary() {
-        if (allData.length === 0) {
-          document.getElementById("today-container").innerHTML =
-            "<p>Tidak ada data.</p>";
+        const container = document.getElementById("today-container");
+        const data = window.allData;
+        if (!data || data.length === 0) {
+          container.innerHTML = "<p>Tidak ada data.</p>";
+          window.statusSummary = [];
           return;
         }
 
-        // Kelompokkan per karyawan
+        // Urutkan seluruh data per ID berdasarkan Timestamp
         const grouped = {};
-        allData.forEach((r) => {
-          const id = r.id_karyawan;
-          if (!grouped[id]) grouped[id] = { id, nama: r.nama, records: [] };
+        data.forEach((row) => {
+          const id = row.ID;
+          if (!grouped[id]) {
+            grouped[id] = { id: id, nama: row.Nama, records: [] };
+          }
           grouped[id].records.push({
-            jenis: r.jenis,
-            timestamp: new Date(r.created_at),
-            lokasi: r.lokasi,
+            jenis: row.Jenis,
+            timestamp: new Date(row.Timestamp),
+            lokasi: row.Lokasi,
           });
         });
 
+        // Untuk setiap karyawan, cari Masuk terakhir dan Pulang setelahnya
         const summaries = [];
-        const nowWIB = getCurrentWIB();
-        for (const [id, group] of Object.entries(grouped)) {
-          const records = group.records.sort(
-            (a, b) => a.timestamp - b.timestamp,
-          );
-          let lastMasuk = null,
-            lastPulang = null;
-          records.forEach((r) => {
+        for (let [id, group] of Object.entries(grouped)) {
+          const records = group.records;
+          records.sort((a, b) => a.timestamp - b.timestamp);
+
+          let lastMasuk = null;
+          let lastPulang = null;
+          for (let r of records) {
             if (r.jenis === "Masuk") lastMasuk = r;
             else if (r.jenis === "Pulang") lastPulang = r;
-          });
+          }
 
           let status = "none";
-          let jamMasuk = null,
-            lokasiMasuk = null;
-          let jamPulang = null,
-            lokasiPulang = null;
-          let durationHours = null;
+          let jamMasuk = "-";
+          let lokasiMasuk = "-";
+          let jamPulang = "-";
+          let lokasiPulang = "-";
 
           if (lastMasuk && lastPulang) {
             if (lastPulang.timestamp > lastMasuk.timestamp) {
               status = "done";
-              jamMasuk = lastMasuk.timestamp;
+              jamMasuk = formatWIB(lastMasuk.timestamp);
               lokasiMasuk = lastMasuk.lokasi;
-              jamPulang = lastPulang.timestamp;
+              jamPulang = formatWIB(lastPulang.timestamp);
               lokasiPulang = lastPulang.lokasi;
             } else {
               status = "working";
-              jamMasuk = lastMasuk.timestamp;
+              jamMasuk = formatWIB(lastMasuk.timestamp);
               lokasiMasuk = lastMasuk.lokasi;
             }
-          } else if (lastMasuk) {
+          } else if (lastMasuk && !lastPulang) {
             status = "working";
-            jamMasuk = lastMasuk.timestamp;
+            jamMasuk = formatWIB(lastMasuk.timestamp);
             lokasiMasuk = lastMasuk.lokasi;
-          } else if (lastPulang) {
+          } else if (!lastMasuk && lastPulang) {
             status = "done";
-            jamPulang = lastPulang.timestamp;
+            jamPulang = formatWIB(lastPulang.timestamp);
             lokasiPulang = lastPulang.lokasi;
+          } else {
+            status = "none";
           }
-
-          if (status === "working" && jamMasuk) {
-            durationHours = (nowWIB - jamMasuk) / 3600000;
-          }
-
-          // Dapatkan no_wa
-          const kary = karyawanData.find((k) => k.id_karyawan === id);
-          const noWa = kary ? kary.no_wa : null;
 
           summaries.push({
             id: group.id,
             nama: group.nama,
-            status,
-            jamMasuk: jamMasuk ? formatWIB(jamMasuk) : "-",
-            lokasiMasuk: lokasiMasuk || "-",
-            jamPulang: jamPulang ? formatWIB(jamPulang) : "-",
-            lokasiPulang: lokasiPulang || "-",
-            durationHours,
-            noWa,
+            status: status,
+            masuk: status === "working" || status === "done" ? jamMasuk : null,
+            lokasiMasuk: lokasiMasuk,
+            pulang: status === "done" ? jamPulang : null,
+            lokasiPulang: lokasiPulang,
           });
         }
 
         window.statusSummary = summaries;
-        applyFilter();
+        applyFilter(); // render dengan filter aktif
       }
 
-      let currentFilter = "all";
+      // ===== FILTER & RENDER KARTU =====
       function applyFilter() {
-        currentFilter = document.getElementById("statusFilter").value;
+        const filter = document.getElementById("statusFilter")?.value || "all";
         const container = document.getElementById("today-container");
-        const filtered = window.statusSummary.filter((s) => {
-          if (currentFilter === "working") return s.status === "working";
-          if (currentFilter === "done") return s.status === "done";
-          return true;
-        });
+        if (!window.statusSummary || window.statusSummary.length === 0) {
+          container.innerHTML = "<p>Tidak ada data karyawan.</p>";
+          return;
+        }
+
+        let filtered = window.statusSummary;
+        if (filter === "working") {
+          filtered = window.statusSummary.filter((s) => s.status === "working");
+        } else if (filter === "done") {
+          filtered = window.statusSummary.filter((s) => s.status === "done");
+        }
 
         if (filtered.length === 0) {
           container.innerHTML = "<p>Tidak ada data sesuai filter.</p>";
@@ -423,53 +390,39 @@
         filtered.forEach((s) => {
           let badgeClass = "none",
             badgeText = "Belum ada data";
-          let cardClass = "";
           if (s.status === "working") {
-            if (s.durationHours !== null && s.durationHours > 9) {
-              cardClass = "warning";
-              badgeClass = "warning-badge";
-              badgeText = "⚠️ Lebih dari 9 jam";
-            } else {
-              badgeClass = "working";
-              badgeText = "Sedang Bekerja";
-            }
+            badgeClass = "working";
+            badgeText = "Sedang Bekerja";
           } else if (s.status === "done") {
             badgeClass = "done";
             badgeText = "Sudah Pulang";
           }
 
           html += `
-            <div class="status-card ${cardClass}">
+            <div class="status-card">
                 <span class="badge ${badgeClass}">${badgeText}</span>
                 <div class="card-name">${s.nama}</div>
                 <div class="card-id">ID: ${s.id}</div>
-                <div class="card-time"><span>🟢 Masuk:</span> ${s.jamMasuk} (${s.lokasiMasuk})</div>
-                <div class="card-time"><span>🔴 Pulang:</span> ${s.jamPulang} ${s.jamPulang !== "-" ? "(" + s.lokasiPulang + ")" : ""}</div>
-                ${
-                  s.status === "working" &&
-                  s.durationHours !== null &&
-                  s.durationHours > 9 &&
-                  s.noWa
-                    ? `
-                <a class="wa-btn" href="https://wa.me/${s.noWa}?text=${encodeURIComponent("Halo " + s.nama + ", Anda sudah bekerja lebih dari 9 jam (masuk " + s.jamMasuk + "). Mohon segera absen pulang.")}" target="_blank">Hubungi via WA</a>
-                `
-                    : ""
-                }
+                <div class="card-time"><span>🟢 Masuk:</span> ${s.masuk || "-"} ${s.masuk ? "(" + s.lokasiMasuk + ")" : ""}</div>
+                <div class="card-time"><span>🔴 Pulang:</span> ${s.pulang || "-"} ${s.pulang ? "(" + s.lokasiPulang + ")" : ""}</div>
             </div>`;
         });
         html += "</div>";
         container.innerHTML = html;
       }
 
-      // ===== DOWNLOAD =====
+      // ===== DOWNLOAD EXCEL =====
       function downloadExcel() {
-        if (allData.length === 0) return alert("Tidak ada data.");
-        const data = allData.map((r) => ({
-          Tanggal: formatWIB(r.created_at),
-          ID: r.id_karyawan,
-          Nama: r.nama,
-          Jenis: r.jenis,
-          Lokasi: r.lokasi,
+        if (!window.allData || window.allData.length === 0) {
+          alert("Tidak ada data.");
+          return;
+        }
+        const data = window.allData.map((r) => ({
+          Tanggal: formatWIB(r.Timestamp),
+          ID: r.ID,
+          Nama: r.Nama,
+          Jenis: r.Jenis,
+          Lokasi: r.Lokasi,
         }));
         const ws = XLSX.utils.json_to_sheet(data);
         ws["!cols"] = [
@@ -488,13 +441,22 @@
       }
 
       function downloadStatusExcel() {
-        const filtered = window.statusSummary.filter((s) => {
-          if (currentFilter === "working") return s.status === "working";
-          if (currentFilter === "done") return s.status === "done";
-          return true;
-        });
-        if (filtered.length === 0) return alert("Tidak ada data.");
-        const data = filtered.map((s) => ({
+        const filter = document.getElementById("statusFilter")?.value || "all";
+        let dataToDownload = window.statusSummary;
+        if (filter === "working")
+          dataToDownload = window.statusSummary.filter(
+            (s) => s.status === "working",
+          );
+        else if (filter === "done")
+          dataToDownload = window.statusSummary.filter(
+            (s) => s.status === "done",
+          );
+
+        if (!dataToDownload || dataToDownload.length === 0) {
+          alert("Tidak ada data untuk diunduh.");
+          return;
+        }
+        const data = dataToDownload.map((s) => ({
           ID: s.id,
           Nama: s.nama,
           Status:
@@ -502,15 +464,11 @@
               ? "Sedang Bekerja"
               : s.status === "done"
                 ? "Sudah Pulang"
-                : "Belum data",
-          "Jam Masuk": s.jamMasuk,
-          "Lokasi Masuk": s.lokasiMasuk,
-          "Jam Pulang": s.jamPulang,
-          "Lokasi Pulang": s.lokasiPulang,
-          "Durasi (jam)":
-            s.durationHours !== null
-              ? Math.round(s.durationHours * 10) / 10
-              : "-",
+                : "Belum ada data",
+          "Jam Masuk": s.masuk || "-",
+          "Lokasi Masuk": s.lokasiMasuk || "-",
+          "Jam Pulang": s.pulang || "-",
+          "Lokasi Pulang": s.lokasiPulang || "-",
         }));
         const ws = XLSX.utils.json_to_sheet(data);
         ws["!cols"] = [
@@ -521,7 +479,6 @@
           { wch: 25 },
           { wch: 22 },
           { wch: 25 },
-          { wch: 12 },
         ];
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Status Terkini");
@@ -546,13 +503,13 @@
         } else {
           document.querySelector(".tab-btn:last-child").classList.add("active");
           document.getElementById("today-tab").style.display = "block";
+          // Pastikan dropdown reset ke 'all' agar tampilan awal konsisten
           document.getElementById("statusFilter").value = "all";
           applyFilter();
         }
       }
 
-      // ===== START =====
-      fetchData();
+      fetchDataJSONP();
     </script>
   </body>
 </html>
