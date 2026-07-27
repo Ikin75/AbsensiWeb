@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Absensi Digital</title>
-    <!-- HANYA SATU KALI LOAD SUPABASE -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
       * {
@@ -135,7 +134,6 @@
         color: #64748b;
       }
 
-      /* Modal Pop-up */
       .modal-overlay {
         display: none;
         position: fixed;
@@ -239,7 +237,6 @@
       <div class="footer">Created by SANTARA</div>
     </div>
 
-    <!-- Pop-up Modal -->
     <div class="modal-overlay" id="popupModal">
       <div class="modal-box">
         <h2 id="popupTitle">Informasi</h2>
@@ -250,10 +247,14 @@
 
     <script>
       // ===== KONFIGURASI SUPABASE =====
-      const SUPABASE_URL = "https://rpyjrqviloxhsmykszox.supabase.co"; // GANTI
+      const SUPABASE_URL = "https://rpyjrqviloxhsmykszox.supabase.co";
       const SUPABASE_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJweWpycXZpbG94aHNteWtzem94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMDUwNjEsImV4cCI6MjEwMDY4MTA2MX0.U07C-P84w-UfcdAd8ic2JjZHFPTTneiwSAIr7D4yG9o"; // GANTI (anon key)
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJweWpycXZpbG94aHNteWtzem94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMDUwNjEsImV4cCI6MjEwMDY4MTA2MX0.U07C-P84w-UfcdAd8ic2JjZHFPTTneiwSAIr7D4yG9o";
+      // Gunakan nama variabel berbeda agar tidak bentrok
+      const supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY,
+      );
 
       // ===== KONFIGURASI LOKASI =====
       const OFFICE_LOCATIONS = [
@@ -294,7 +295,9 @@
       async function getDaftarKaryawan() {
         const cached = localStorage.getItem("daftar_karyawan");
         if (cached) return JSON.parse(cached);
-        const { data, error } = await supabase.from("karyawan").select("*");
+        const { data, error } = await supabaseClient
+          .from("karyawan")
+          .select("*");
         if (error) {
           console.error(error);
           return [];
@@ -305,7 +308,7 @@
 
       // Status absensi terbaru dari Supabase
       async function checkStatusFromDB(id) {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
           .from("absensi")
           .select("jenis")
           .eq("id_karyawan", id)
@@ -320,7 +323,7 @@
 
       // Simpan absensi
       async function simpanKeDB(id, nama, jenis, lat, lng, lokasi) {
-        const { error } = await supabase.from("absensi").insert({
+        const { error } = await supabaseClient.from("absensi").insert({
           id_karyawan: id,
           nama: nama,
           jenis: jenis,
@@ -414,7 +417,6 @@
           namaInput.value = karyawan.nama;
           namaGroup.style.display = "block";
           currentKaryawan = karyawan;
-          // Cek status langsung dari DB
           const status = await checkStatusFromDB(id);
           if (status === "masuk") {
             showPopup(
@@ -439,7 +441,6 @@
       });
 
       function updateButtons() {
-        // Tombol hanya diupdate setelah cek lokasi dan status
         if (!currentKaryawan || !isInside) {
           btnMasuk.disabled = true;
           btnPulang.disabled = true;
