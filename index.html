@@ -246,11 +246,20 @@
     </div>
 
     <script>
+      // ===== VERSIONING UNTUK CACHE =====
+      const CACHE_VERSION = 1; // Setiap kali ada perubahan di tabel karyawan, naikkan angka ini
+      const CACHE_KEY = "daftar_karyawan";
+      const VERSION_KEY = "cache_version";
+
+      function isCacheValid() {
+        const storedVersion = localStorage.getItem(VERSION_KEY);
+        return storedVersion && parseInt(storedVersion) === CACHE_VERSION;
+      }
+
       // ===== KONFIGURASI SUPABASE =====
       const SUPABASE_URL = "https://rpyjrqviloxhsmykszox.supabase.co";
       const SUPABASE_KEY =
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJweWpycXZpbG94aHNteWtzem94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMDUwNjEsImV4cCI6MjEwMDY4MTA2MX0.U07C-P84w-UfcdAd8ic2JjZHFPTTneiwSAIr7D4yG9o";
-      // Gunakan nama variabel berbeda agar tidak bentrok
       const supabaseClient = window.supabase.createClient(
         SUPABASE_URL,
         SUPABASE_KEY,
@@ -291,10 +300,20 @@
       const detailLokasi = document.getElementById("detailLokasi");
       const messageEl = document.getElementById("message");
 
-      // Daftar karyawan dari Supabase (cache di localStorage)
+      // Daftar karyawan dari Supabase (dengan mekanisme cache versioning)
       async function getDaftarKaryawan() {
-        const cached = localStorage.getItem("daftar_karyawan");
-        if (cached) return JSON.parse(cached);
+        // Jika cache valid, gunakan localStorage
+        if (isCacheValid()) {
+          const cached = localStorage.getItem(CACHE_KEY);
+          if (cached) {
+            try {
+              return JSON.parse(cached);
+            } catch (e) {
+              // Cache rusak, lanjutkan fetch
+            }
+          }
+        }
+        // Fetch dari Supabase
         const { data, error } = await supabaseClient
           .from("karyawan")
           .select("*");
@@ -302,7 +321,9 @@
           console.error(error);
           return [];
         }
-        localStorage.setItem("daftar_karyawan", JSON.stringify(data));
+        // Simpan ke localStorage dengan versi baru
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        localStorage.setItem(VERSION_KEY, CACHE_VERSION);
         return data;
       }
 
