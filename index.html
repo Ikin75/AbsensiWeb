@@ -134,6 +134,29 @@
         color: #64748b;
       }
 
+      /* Kotak Status Baru */
+      .status-info-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 20px;
+        text-align: left;
+        font-size: 14px;
+        display: none;
+      }
+      .status-info-box.active {
+        display: block;
+      }
+      .status-info-box .status-line {
+        margin-bottom: 4px;
+      }
+      .status-info-box .label {
+        font-weight: 600;
+        color: #334155;
+      }
+
+      /* Pop-up Modal (tetap untuk error / sukses) */
       .modal-overlay {
         display: none;
         position: fixed;
@@ -216,6 +239,14 @@
         <div class="id-info" id="idInfo"></div>
       </div>
 
+      <!-- Kotak Status Aktivitas -->
+      <div class="status-info-box" id="statusInfoBox">
+        <div class="status-line">
+          <span class="label" id="statusLabel"></span>
+        </div>
+        <div class="status-line" id="statusTimeDetail"></div>
+      </div>
+
       <div class="input-group" id="namaGroup" style="display: none">
         <label for="nama">Nama Karyawan</label>
         <input type="text" id="nama" placeholder="Nama Anda" readonly />
@@ -237,6 +268,7 @@
       <div class="footer">Created by SANTARA</div>
     </div>
 
+    <!-- Pop-up Modal -->
     <div class="modal-overlay" id="popupModal">
       <div class="modal-box">
         <h2 id="popupTitle">Informasi</h2>
@@ -246,16 +278,6 @@
     </div>
 
     <script>
-      // ===== VERSIONING UNTUK CACHE =====
-      const CACHE_VERSION = 1; // Setiap kali ada perubahan di tabel karyawan, naikkan angka ini
-      const CACHE_KEY = "daftar_karyawan";
-      const VERSION_KEY = "cache_version";
-
-      function isCacheValid() {
-        const storedVersion = localStorage.getItem(VERSION_KEY);
-        return storedVersion && parseInt(storedVersion) === CACHE_VERSION;
-      }
-
       // ===== KONFIGURASI SUPABASE =====
       const SUPABASE_URL = "https://rpyjrqviloxhsmykszox.supabase.co";
       const SUPABASE_KEY =
@@ -288,7 +310,6 @@
       let currentLocationName = null;
       let currentKaryawan = null;
       let watchId = null;
-      let today = new Date().toLocaleDateString("id-ID");
 
       const idInput = document.getElementById("idKaryawan");
       const idInfo = document.getElementById("idInfo");
@@ -300,20 +321,14 @@
       const detailLokasi = document.getElementById("detailLokasi");
       const messageEl = document.getElementById("message");
 
-      // Daftar karyawan dari Supabase (dengan mekanisme cache versioning)
+      const statusInfoBox = document.getElementById("statusInfoBox");
+      const statusLabel = document.getElementById("statusLabel");
+      const statusTimeDetail = document.getElementById("statusTimeDetail");
+
+      // ===== FUNGSI DATABASE =====
       async function getDaftarKaryawan() {
-        // Jika cache valid, gunakan localStorage
-        if (isCacheValid()) {
-          const cached = localStorage.getItem(CACHE_KEY);
-          if (cached) {
-            try {
-              return JSON.parse(cached);
-            } catch (e) {
-              // Cache rusak, lanjutkan fetch
-            }
-          }
-        }
-        // Fetch dari Supabase
+        const cached = localStorage.getItem("daftar_karyawan");
+        if (cached) return JSON.parse(cached);
         const { data, error } = await supabaseClient
           .from("karyawan")
           .select("*");
@@ -321,29 +336,39 @@
           console.error(error);
           return [];
         }
-        // Simpan ke localStorage dengan versi baru
-        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-        localStorage.setItem(VERSION_KEY, CACHE_VERSION);
+        localStorage.setItem("daftar_karyawan", JSON.stringify(data));
         return data;
       }
 
-      // Status absensi terbaru dari Supabase
-      async function checkStatusFromDB(id) {
+      // Ambil record TERAKHIR (Masuk atau Pulang) lengkap dengan timestamp
+      async function getLastRecord(id) {
         const { data, error } = await supabaseClient
           .from("absensi")
-          .select("jenis")
+          .select("jenis, created_at")
           .eq("id_karyawan", id)
           .order("created_at", { ascending: false })
           .limit(1);
         if (error) {
           console.error(error);
-          return "error";
+          return null;
         }
-        return data.length > 0 ? data[0].jenis.toLowerCase() : "belum";
+        return data.length > 0 ? data[0] : null;
       }
 
-      // Simpan absensi
       async function simpanKeDB(id, nama, jenis, lat, lng, lokasi) {
+        // Buat WIB string
+        const parts = new Intl.DateTimeFormat("id-ID", {
+          timeZone: "Asia/Jakarta",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).formatToParts(new Date());
+        const wibFormatted = `${parts[4].value}-${parts[2].value}-${parts[0].value} ${parts[6].value}:${parts[8].value}:${parts[10].value}`;
+
         const { error } = await supabaseClient.from("absensi").insert({
           id_karyawan: id,
           nama: nama,
@@ -351,6 +376,7 @@
           lat: lat,
           lng: lng,
           lokasi: lokasi || "Tidak diketahui",
+          created_at_wib: wibFormatted,
         });
         if (error) throw error;
       }
@@ -427,6 +453,86 @@
         }
       }
 
+      // ===== TAMPILAN STATUS DI BAWAH ID =====
+      function formatWIB(isoString) {
+        const date = new Date(isoString);
+        const options = {
+          timeZone: "Asia/Jakarta",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        };
+        const formatter = new Intl.DateTimeFormat("id-ID", options);
+        const parts = formatter.formatToParts(date);
+        const p = {};
+        parts.forEach((x) => {
+          if (x.type !== "literal") p[x.type] = x.value;
+        });
+        return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
+      }
+
+      function hitungDurasi(isoString) {
+        const start = new Date(isoString);
+        const now = new Date();
+        const diffMs = now - start;
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffMinutes = Math.floor((diffMs % 3600000) / 60000);
+        if (diffHours > 0) return `${diffHours} jam ${diffMinutes} menit`;
+        return `${diffMinutes} menit`;
+      }
+
+      function tampilkanStatus(record, nama) {
+        statusInfoBox.classList.add("active");
+        if (!record) {
+          // Belum ada data sama sekali
+          statusLabel.innerHTML = "⚪ Belum ada aktivitas absensi.";
+          statusTimeDetail.textContent = `Halo, ${nama}! Silakan lakukan absen masuk.`;
+          btnMasuk.disabled = !isInside;
+          btnPulang.disabled = true;
+          return;
+        }
+
+        const jenis = record.jenis;
+        const waktu = formatWIB(record.created_at);
+
+        if (jenis === "Masuk") {
+          // Sedang bekerja
+          const durasi = hitungDurasi(record.created_at);
+          statusLabel.innerHTML = `🟢 <span style="color:#16a34a;">Sedang bekerja</span>`;
+          statusTimeDetail.innerHTML = `Masuk: <strong>${waktu}</strong> (${durasi} yang lalu)`;
+          btnMasuk.disabled = true;
+          btnPulang.disabled = !isInside;
+        } else if (jenis === "Pulang") {
+          // Sudah pulang, cari pasangan masuk sebelumnya untuk durasi shift
+          supabaseClient
+            .from("absensi")
+            .select("created_at")
+            .eq("id_karyawan", currentKaryawan.id_karyawan)
+            .eq("jenis", "Masuk")
+            .lt("created_at", record.created_at)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .then(({ data }) => {
+              let shiftInfo = "";
+              if (data && data.length > 0) {
+                const masuk = new Date(data[0].created_at);
+                const pulang = new Date(record.created_at);
+                const diffMs = pulang - masuk;
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffMinutes = Math.floor((diffMs % 3600000) / 60000);
+                shiftInfo = ` | Shift: ${diffHours} jam ${diffMinutes} menit`;
+              }
+              statusLabel.innerHTML = `🔴 <span style="color:#dc2626;">Sudah pulang</span>`;
+              statusTimeDetail.innerHTML = `Pulang: <strong>${waktu}</strong>${shiftInfo}`;
+            });
+          btnMasuk.disabled = !isInside;
+          btnPulang.disabled = true;
+        }
+      }
+
       // ===== UI LOGIC =====
       idInput.addEventListener("input", async function () {
         const id = this.value.trim().toUpperCase();
@@ -438,24 +544,15 @@
           namaInput.value = karyawan.nama;
           namaGroup.style.display = "block";
           currentKaryawan = karyawan;
-          const status = await checkStatusFromDB(id);
-          if (status === "masuk") {
-            showPopup(
-              "Status",
-              `Anda (${karyawan.nama}) sudah absen masuk. Silakan absen pulang.`,
-            );
-            btnMasuk.disabled = true;
-            btnPulang.disabled = !isInside;
-          } else {
-            showPopup("Status", `Silakan absen masuk.`);
-            btnMasuk.disabled = !isInside;
-            btnPulang.disabled = true;
-          }
+
+          const record = await getLastRecord(id);
+          tampilkanStatus(record, karyawan.nama);
         } else {
           idInfo.textContent = "ID tidak ditemukan";
           idInfo.style.color = "#dc2626";
           namaGroup.style.display = "none";
           currentKaryawan = null;
+          statusInfoBox.classList.remove("active");
           btnMasuk.disabled = true;
           btnPulang.disabled = true;
         }
@@ -482,14 +579,12 @@
         const id = currentKaryawan.id_karyawan;
         const nama = currentKaryawan.nama;
 
-        showPopup("Memeriksa", "Mengecek status...");
-        const status = await checkStatusFromDB(id);
-
-        if (jenis === "Masuk" && status === "masuk") {
+        const record = await getLastRecord(id);
+        if (jenis === "Masuk" && record && record.jenis === "Masuk") {
           showPopup("Gagal", "Anda sudah absen masuk.");
           return;
         }
-        if (jenis === "Pulang" && status !== "masuk") {
+        if (jenis === "Pulang" && (!record || record.jenis !== "Masuk")) {
           showPopup("Gagal", "Anda belum absen masuk.");
           return;
         }
@@ -506,13 +601,12 @@
           );
           if (jenis === "Masuk") {
             showPopup("Sukses", `Selamat bekerja, ${nama}!`);
-            btnMasuk.disabled = true;
-            btnPulang.disabled = false;
           } else {
             showPopup("Sukses", "Hati-hati di jalan, sehat selalu.");
-            btnMasuk.disabled = false;
-            btnPulang.disabled = true;
           }
+          // Refresh status setelah absen
+          const newRecord = await getLastRecord(id);
+          tampilkanStatus(newRecord, nama);
         } catch (e) {
           showPopup("Error", "Gagal menyimpan data. Coba lagi.");
           console.error(e);
