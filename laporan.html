@@ -18,7 +18,7 @@
         padding: 20px;
       }
       .container {
-        max-width: 960px;
+        max-width: 1100px;
         margin: auto;
         background: white;
         border-radius: 16px;
@@ -36,6 +36,7 @@
       }
       .tab-nav {
         display: flex;
+        flex-wrap: wrap;
         gap: 10px;
         margin-bottom: 20px;
       }
@@ -112,7 +113,7 @@
 
       .card-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: 16px;
         margin-top: 20px;
       }
@@ -152,6 +153,10 @@
         background: #fef3c7;
         color: #92400e;
       }
+      .badge.incomplete {
+        background: #e0e7ff;
+        color: #3730a3;
+      }
       .card-name {
         font-size: 16px;
         font-weight: 700;
@@ -184,6 +189,34 @@
       .wa-btn:hover {
         background: #1ebc57;
       }
+
+      /* Rekapan Shift */
+      .shift-group {
+        margin-bottom: 30px;
+      }
+      .shift-group h3 {
+        font-size: 18px;
+        margin-bottom: 10px;
+        color: #0f172a;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 5px;
+      }
+      .shift-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+      }
+      .shift-table th {
+        background: #f8fafc;
+        font-size: 13px;
+      }
+      .shift-table td {
+        font-size: 13px;
+      }
+      .text-red {
+        color: #dc2626;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
@@ -197,6 +230,9 @@
         </button>
         <button class="tab-btn" onclick="switchTab('today')">
           📌 Status Terkini
+        </button>
+        <button class="tab-btn" onclick="switchTab('rekapan')">
+          🗂️ Rekapan Shift
         </button>
       </div>
 
@@ -225,6 +261,12 @@
           </div>
           <div id="today-container" class="loading">Memuat data...</div>
         </div>
+        <div id="rekapan-tab" style="display: none">
+          <button class="btn" onclick="downloadRekapanExcel()">
+            📥 Download Rekapan (.xlsx)
+          </button>
+          <div id="rekapan-container" class="loading">Memuat data...</div>
+        </div>
       </div>
     </div>
 
@@ -239,7 +281,8 @@
       );
 
       let allData = [];
-      let karyawanData = []; // untuk mendapatkan no_wa
+      let karyawanData = [];
+      let statusSummary = [];
 
       // ===== HELPER WIB =====
       function formatWIB(isoString) {
@@ -265,17 +308,14 @@
       }
 
       function getCurrentWIB() {
-        const now = new Date();
-        const wib = new Date(
-          now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
+        return new Date(
+          new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
         );
-        return wib;
       }
 
       // ===== FETCH DATA =====
       async function fetchData() {
         try {
-          // Ambil semua data absensi dan karyawan
           const [absensiRes, karyawanRes] = await Promise.all([
             supabaseClient
               .from("absensi")
@@ -291,12 +331,14 @@
 
           buildRiwayat();
           buildStatusSummary();
+          buildRekapanShift();
         } catch (e) {
           document.getElementById("riwayat-container").innerHTML =
             `<p style="color:red;">Gagal memuat data: ${e.message}</p>`;
           document.getElementById("today-container").innerHTML =
             `<p style="color:red;">Gagal memuat data.</p>`;
-          console.error(e);
+          document.getElementById("rekapan-container").innerHTML =
+            `<p style="color:red;">Gagal memuat data.</p>`;
         }
       }
 
@@ -322,10 +364,9 @@
         if (allData.length === 0) {
           document.getElementById("today-container").innerHTML =
             "<p>Tidak ada data.</p>";
+          statusSummary = [];
           return;
         }
-
-        // Kelompokkan per karyawan
         const grouped = {};
         allData.forEach((r) => {
           const id = r.id_karyawan;
@@ -383,7 +424,6 @@
             durationHours = (nowWIB - jamMasuk) / 3600000;
           }
 
-          // Dapatkan no_wa
           const kary = karyawanData.find((k) => k.id_karyawan === id);
           const noWa = kary ? kary.no_wa : null;
 
@@ -399,16 +439,14 @@
             noWa,
           });
         }
-
-        window.statusSummary = summaries;
+        statusSummary = summaries;
         applyFilter();
       }
 
       let currentFilter = "all";
       function applyFilter() {
-        currentFilter = document.getElementById("statusFilter").value;
         const container = document.getElementById("today-container");
-        const filtered = window.statusSummary.filter((s) => {
+        const filtered = statusSummary.filter((s) => {
           if (currentFilter === "working") return s.status === "working";
           if (currentFilter === "done") return s.status === "done";
           return true;
@@ -461,6 +499,109 @@
         container.innerHTML = html;
       }
 
+      // ===== REKAPAN SHIFT =====
+      function buildRekapanShift() {
+        const container = document.getElementById("rekapan-container");
+        if (allData.length === 0) {
+          container.innerHTML = "<p>Tidak ada data.</p>";
+          return;
+        }
+
+        // Kelompokkan per ID, lalu urutkan per timestamp
+        const grouped = {};
+        allData.forEach((r) => {
+          const id = r.id_karyawan;
+          if (!grouped[id]) grouped[id] = { id, nama: r.nama, records: [] };
+          grouped[id].records.push({
+            jenis: r.jenis,
+            timestamp: new Date(r.created_at),
+            lokasi: r.lokasi,
+          });
+        });
+
+        let html = "";
+        for (const [id, group] of Object.entries(grouped)) {
+          const records = group.records.sort(
+            (a, b) => a.timestamp - b.timestamp,
+          );
+          const pairs = [];
+          let currentMasuk = null;
+
+          records.forEach((r) => {
+            if (r.jenis === "Masuk") {
+              // Jika ada masuk sebelumnya yang belum punya pulang, simpan dulu sebagai incomplete
+              if (currentMasuk) {
+                pairs.push({ masuk: currentMasuk, pulang: null });
+              }
+              currentMasuk = r;
+            } else if (r.jenis === "Pulang") {
+              if (currentMasuk) {
+                pairs.push({ masuk: currentMasuk, pulang: r });
+                currentMasuk = null;
+              } else {
+                // Pulang tanpa masuk (seharusnya jarang)
+                pairs.push({ masuk: null, pulang: r });
+              }
+            }
+          });
+          // Jika masih ada masuk yang belum pulang
+          if (currentMasuk) {
+            pairs.push({ masuk: currentMasuk, pulang: null });
+          }
+
+          if (pairs.length === 0) continue;
+
+          html += `<div class="shift-group">
+                <h3>${group.nama} (${id})</h3>
+                <table class="shift-table">
+                    <thead><tr>
+                        <th>Masuk</th><th>Lokasi Masuk</th>
+                        <th>Pulang</th><th>Lokasi Pulang</th>
+                        <th>Durasi</th><th>Status</th>
+                    </tr></thead><tbody>`;
+
+          pairs.forEach((pair) => {
+            const masukWaktu = pair.masuk
+              ? formatWIB(pair.masuk.timestamp)
+              : "-";
+            const masukLok = pair.masuk ? pair.masuk.lokasi : "-";
+            const pulangWaktu = pair.pulang
+              ? formatWIB(pair.pulang.timestamp)
+              : '<span class="text-red">BELUM PULANG</span>';
+            const pulangLok = pair.pulang ? pair.pulang.lokasi : "-";
+            let durasi = "-";
+            let statusText = "";
+            let rowStyle = "";
+
+            if (pair.masuk && pair.pulang) {
+              const diffMs = pair.pulang.timestamp - pair.masuk.timestamp;
+              const diffHours = diffMs / 3600000;
+              durasi = `${Math.floor(diffHours)} jam ${Math.floor((diffHours % 1) * 60)} menit`;
+              statusText = "✅ Lengkap";
+            } else if (pair.masuk && !pair.pulang) {
+              durasi = "-";
+              statusText = "⚠️ Belum Pulang";
+              rowStyle = 'style="background: #fffbeb;"';
+            } else if (!pair.masuk && pair.pulang) {
+              durasi = "-";
+              statusText = "❓ Tidak Ada Masuk";
+              rowStyle = 'style="background: #fee2e2;"';
+            }
+
+            html += `<tr ${rowStyle}>
+                    <td>${masukWaktu}</td><td>${masukLok}</td>
+                    <td>${pulangWaktu}</td><td>${pulangLok}</td>
+                    <td>${durasi}</td><td>${statusText}</td>
+                </tr>`;
+          });
+
+          html += "</tbody></table></div>";
+        }
+
+        container.innerHTML = html || "<p>Tidak ada data shift.</p>";
+        window.rekapanData = allData; // untuk download
+      }
+
       // ===== DOWNLOAD =====
       function downloadExcel() {
         if (allData.length === 0) return alert("Tidak ada data.");
@@ -472,13 +613,6 @@
           Lokasi: r.lokasi,
         }));
         const ws = XLSX.utils.json_to_sheet(data);
-        ws["!cols"] = [
-          { wch: 22 },
-          { wch: 10 },
-          { wch: 25 },
-          { wch: 10 },
-          { wch: 30 },
-        ];
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Riwayat");
         XLSX.writeFile(
@@ -488,7 +622,7 @@
       }
 
       function downloadStatusExcel() {
-        const filtered = window.statusSummary.filter((s) => {
+        const filtered = statusSummary.filter((s) => {
           if (currentFilter === "working") return s.status === "working";
           if (currentFilter === "done") return s.status === "done";
           return true;
@@ -513,21 +647,85 @@
               : "-",
         }));
         const ws = XLSX.utils.json_to_sheet(data);
-        ws["!cols"] = [
-          { wch: 10 },
-          { wch: 25 },
-          { wch: 15 },
-          { wch: 22 },
-          { wch: 25 },
-          { wch: 22 },
-          { wch: 25 },
-          { wch: 12 },
-        ];
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Status Terkini");
         XLSX.writeFile(
           wb,
           `status_terkini_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
+      }
+
+      function downloadRekapanExcel() {
+        // Membuat ringkasan pasangan shift untuk Excel
+        const rows = [];
+        const grouped = {};
+        allData.forEach((r) => {
+          const id = r.id_karyawan;
+          if (!grouped[id]) grouped[id] = { id, nama: r.nama, records: [] };
+          grouped[id].records.push({
+            jenis: r.jenis,
+            timestamp: new Date(r.created_at),
+            lokasi: r.lokasi,
+          });
+        });
+
+        for (const [id, group] of Object.entries(grouped)) {
+          const records = group.records.sort(
+            (a, b) => a.timestamp - b.timestamp,
+          );
+          let currentMasuk = null;
+          records.forEach((r) => {
+            if (r.jenis === "Masuk") {
+              if (currentMasuk)
+                rows.push({
+                  ID: id,
+                  Nama: group.nama,
+                  Masuk: formatWIB(currentMasuk.timestamp),
+                  "Lokasi Masuk": currentMasuk.lokasi,
+                  Pulang: "BELUM PULANG",
+                  "Lokasi Pulang": "",
+                  Durasi: "",
+                });
+              currentMasuk = r;
+            } else if (r.jenis === "Pulang") {
+              const masuk = currentMasuk;
+              const pulang = r;
+              const durasi = masuk
+                ? ((pulang.timestamp - masuk.timestamp) / 3600000).toFixed(1) +
+                  " jam"
+                : "";
+              rows.push({
+                ID: id,
+                Nama: group.nama,
+                Masuk: masuk ? formatWIB(masuk.timestamp) : "-",
+                "Lokasi Masuk": masuk ? masuk.lokasi : "",
+                Pulang: formatWIB(pulang.timestamp),
+                "Lokasi Pulang": pulang.lokasi,
+                Durasi: durasi,
+              });
+              currentMasuk = null;
+            }
+          });
+          if (currentMasuk) {
+            rows.push({
+              ID: id,
+              Nama: group.nama,
+              Masuk: formatWIB(currentMasuk.timestamp),
+              "Lokasi Masuk": currentMasuk.lokasi,
+              Pulang: "BELUM PULANG",
+              "Lokasi Pulang": "",
+              Durasi: "",
+            });
+          }
+        }
+
+        if (rows.length === 0) return alert("Tidak ada data.");
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Rekapan Shift");
+        XLSX.writeFile(
+          wb,
+          `rekapan_shift_${new Date().toISOString().slice(0, 10)}.xlsx`,
         );
       }
 
@@ -538,16 +736,25 @@
           .forEach((btn) => btn.classList.remove("active"));
         document.getElementById("riwayat-tab").style.display = "none";
         document.getElementById("today-tab").style.display = "none";
+        document.getElementById("rekapan-tab").style.display = "none";
+
         if (tabName === "riwayat") {
           document
-            .querySelector(".tab-btn:first-child")
+            .querySelector(".tab-btn:nth-child(1)")
             .classList.add("active");
           document.getElementById("riwayat-tab").style.display = "block";
-        } else {
-          document.querySelector(".tab-btn:last-child").classList.add("active");
+        } else if (tabName === "today") {
+          document
+            .querySelector(".tab-btn:nth-child(2)")
+            .classList.add("active");
           document.getElementById("today-tab").style.display = "block";
           document.getElementById("statusFilter").value = "all";
           applyFilter();
+        } else if (tabName === "rekapan") {
+          document
+            .querySelector(".tab-btn:nth-child(3)")
+            .classList.add("active");
+          document.getElementById("rekapan-tab").style.display = "block";
         }
       }
 
