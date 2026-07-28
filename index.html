@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Absensi Digital</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS untuk export Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
       * {
         box-sizing: border-box;
@@ -134,7 +136,6 @@
         color: #64748b;
       }
 
-      /* Kotak Status Baru */
       .status-info-box {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -155,8 +156,22 @@
         font-weight: 600;
         color: #334155;
       }
+      .btn-download {
+        background: #0f172a;
+        color: white;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 8px;
+        width: 100%;
+      }
+      .btn-download:hover {
+        background: #1e293b;
+      }
 
-      /* Pop-up Modal (tetap untuk error / sukses) */
       .modal-overlay {
         display: none;
         position: fixed;
@@ -245,6 +260,14 @@
           <span class="label" id="statusLabel"></span>
         </div>
         <div class="status-line" id="statusTimeDetail"></div>
+        <button
+          class="btn-download"
+          id="btnDownloadRiwayat"
+          style="display: none"
+          onclick="downloadRiwayatSaya()"
+        >
+          📥 Riwayat Saya (.xlsx)
+        </button>
       </div>
 
       <div class="input-group" id="namaGroup" style="display: none">
@@ -287,7 +310,6 @@
         SUPABASE_KEY,
       );
 
-      // ===== KONFIGURASI LOKASI =====
       const OFFICE_LOCATIONS = [
         {
           nama: "BAT Singosari (utama)",
@@ -304,7 +326,6 @@
         { nama: "BAT Karanglo", lat: -7.916256, lng: 112.6533, radius: 100 },
       ];
 
-      // ===== STATE =====
       let currentPos = null;
       let isInside = false;
       let currentLocationName = null;
@@ -324,6 +345,7 @@
       const statusInfoBox = document.getElementById("statusInfoBox");
       const statusLabel = document.getElementById("statusLabel");
       const statusTimeDetail = document.getElementById("statusTimeDetail");
+      const btnDownloadRiwayat = document.getElementById("btnDownloadRiwayat");
 
       // ===== FUNGSI DATABASE =====
       async function getDaftarKaryawan() {
@@ -340,7 +362,6 @@
         return data;
       }
 
-      // Ambil record TERAKHIR (Masuk atau Pulang) lengkap dengan timestamp
       async function getLastRecord(id) {
         const { data, error } = await supabaseClient
           .from("absensi")
@@ -356,7 +377,6 @@
       }
 
       async function simpanKeDB(id, nama, jenis, lat, lng, lokasi) {
-        // Buat WIB string
         const parts = new Intl.DateTimeFormat("id-ID", {
           timeZone: "Asia/Jakarta",
           year: "numeric",
@@ -453,7 +473,7 @@
         }
       }
 
-      // ===== TAMPILAN STATUS DI BAWAH ID =====
+      // ===== FORMAT WAKTU =====
       function formatWIB(isoString) {
         const date = new Date(isoString);
         const options = {
@@ -486,8 +506,9 @@
 
       function tampilkanStatus(record, nama) {
         statusInfoBox.classList.add("active");
+        btnDownloadRiwayat.style.display = "block"; // tampilkan tombol download
+
         if (!record) {
-          // Belum ada data sama sekali
           statusLabel.innerHTML = "⚪ Belum ada aktivitas absensi.";
           statusTimeDetail.textContent = `Halo, ${nama}! Silakan lakukan absen masuk.`;
           btnMasuk.disabled = !isInside;
@@ -499,14 +520,12 @@
         const waktu = formatWIB(record.created_at);
 
         if (jenis === "Masuk") {
-          // Sedang bekerja
           const durasi = hitungDurasi(record.created_at);
           statusLabel.innerHTML = `🟢 <span style="color:#16a34a;">Sedang bekerja</span>`;
           statusTimeDetail.innerHTML = `Masuk: <strong>${waktu}</strong> (${durasi} yang lalu)`;
           btnMasuk.disabled = true;
           btnPulang.disabled = !isInside;
         } else if (jenis === "Pulang") {
-          // Sudah pulang, cari pasangan masuk sebelumnya untuk durasi shift
           supabaseClient
             .from("absensi")
             .select("created_at")
@@ -553,6 +572,7 @@
           namaGroup.style.display = "none";
           currentKaryawan = null;
           statusInfoBox.classList.remove("active");
+          btnDownloadRiwayat.style.display = "none";
           btnMasuk.disabled = true;
           btnPulang.disabled = true;
         }
@@ -604,13 +624,122 @@
           } else {
             showPopup("Sukses", "Hati-hati di jalan, sehat selalu.");
           }
-          // Refresh status setelah absen
           const newRecord = await getLastRecord(id);
           tampilkanStatus(newRecord, nama);
         } catch (e) {
           showPopup("Error", "Gagal menyimpan data. Coba lagi.");
           console.error(e);
         }
+      }
+
+      // ===== DOWNLOAD REKAP PRIBADI =====
+      async function downloadRiwayatSaya() {
+        if (!currentKaryawan) return;
+        const id = currentKaryawan.id_karyawan;
+        const nama = currentKaryawan.nama;
+
+        const { data, error } = await supabaseClient
+          .from("absensi")
+          .select("created_at, jenis, lokasi")
+          .eq("id_karyawan", id)
+          .order("created_at", { ascending: true });
+
+        if (error || !data) {
+          alert("Gagal mengambil data.");
+          return;
+        }
+
+        // Proses pairing
+        const rows = [];
+        let currentMasuk = null;
+        data.forEach((r) => {
+          if (r.jenis === "Masuk") {
+            if (currentMasuk) {
+              rows.push({
+                Masuk: formatWIB(currentMasuk.created_at),
+                "Lokasi Masuk": currentMasuk.lokasi,
+                Pulang: "BELUM PULANG",
+                "Lokasi Pulang": "",
+                Durasi: "",
+              });
+            }
+            currentMasuk = r;
+          } else if (r.jenis === "Pulang") {
+            if (currentMasuk) {
+              const durasi =
+                Math.round(
+                  ((new Date(r.created_at) -
+                    new Date(currentMasuk.created_at)) /
+                    3600000) *
+                    10,
+                ) / 10;
+              rows.push({
+                Masuk: formatWIB(currentMasuk.created_at),
+                "Lokasi Masuk": currentMasuk.lokasi,
+                Pulang: formatWIB(r.created_at),
+                "Lokasi Pulang": r.lokasi,
+                Durasi: `${durasi} jam`,
+              });
+              currentMasuk = null;
+            } else {
+              rows.push({
+                Masuk: "-",
+                "Lokasi Masuk": "",
+                Pulang: formatWIB(r.created_at),
+                "Lokasi Pulang": r.lokasi,
+                Durasi: "",
+              });
+            }
+          }
+        });
+        if (currentMasuk) {
+          rows.push({
+            Masuk: formatWIB(currentMasuk.created_at),
+            "Lokasi Masuk": currentMasuk.lokasi,
+            Pulang: "BELUM PULANG",
+            "Lokasi Pulang": "",
+            Durasi: "",
+          });
+        }
+
+        if (rows.length === 0) {
+          alert("Belum ada data absensi.");
+          return;
+        }
+
+        // Tambahkan header dan informasi karyawan
+        const sheetData = [
+          { ID: id, Nama: nama },
+          {
+            Masuk: "",
+            "Lokasi Masuk": "",
+            Pulang: "",
+            "Lokasi Pulang": "",
+            Durasi: "",
+          },
+          ...rows,
+        ];
+
+        const ws = XLSX.utils.json_to_sheet(sheetData, {
+          header: [
+            "Masuk",
+            "Lokasi Masuk",
+            "Pulang",
+            "Lokasi Pulang",
+            "Durasi",
+          ],
+          skipHeader: false,
+        });
+        ws["!cols"] = [
+          { wch: 20 },
+          { wch: 25 },
+          { wch: 20 },
+          { wch: 25 },
+          { wch: 15 },
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Riwayat Saya");
+        XLSX.writeFile(wb, `riwayat_${id}_${nama.replace(/\s/g, "_")}.xlsx`);
       }
 
       // ===== POPUP =====
@@ -628,7 +757,6 @@
         popupModal.classList.remove("active");
       }
 
-      // ===== START =====
       startWatch();
       updateButtons();
     </script>
