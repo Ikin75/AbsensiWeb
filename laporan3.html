@@ -271,15 +271,6 @@
     </div>
 
     <script>
-      // ===== SUPABASE CONFIG =====
-      const SUPABASE_URL = "https://wjiskmzydeesmmxxaqgv.supabase.co";
-      const SUPABASE_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqaXNrbXp5ZGVlc21teHhhcWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTcwOTksImV4cCI6MjEwMzI3MzA5OX0.GaBuPkkrhF_z2mvIIDv9Uy42V26nDftmQ3mjE-wK6_E";
-      const supabaseClient = window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_KEY,
-      );
-
       let allData = [];
       let karyawanData = [];
       let statusSummary = [];
@@ -314,24 +305,20 @@
       }
 
       // ===== FETCH DATA =====
+      // Hapus script supabase dari header (boleh dihapus)
+      // Gunakan fetch ke backend lokal
       async function fetchData() {
         try {
-          const [absensiRes, karyawanRes] = await Promise.all([
-            supabaseClient
-              .from("absensi")
-              .select("*")
-              .order("created_at", { ascending: true }),
-            supabaseClient.from("karyawan").select("*"),
-          ]);
-          if (absensiRes.error) throw absensiRes.error;
-          if (karyawanRes.error) throw karyawanRes.error;
+          const absensiRes = await fetch("http://localhost:5000/api/absensi");
+          const karyawanRes = await fetch("http://localhost:5000/api/karyawan");
 
-          allData = absensiRes.data || [];
-          karyawanData = karyawanRes.data || [];
+          const allData = await absensiRes.json();
+          const karyawanData = await karyawanRes.json();
 
-          buildRiwayat();
-          buildStatusSummary();
-          buildRekapanShift();
+          // sisanya sama persis (buildRiwayat, buildStatusSummary, dll)
+          buildRiwayat(allData);
+          buildStatusSummary(allData, karyawanData);
+          buildRekapanShift(allData);
         } catch (e) {
           document.getElementById("riwayat-container").innerHTML =
             `<p style="color:red;">Gagal memuat data: ${e.message}</p>`;

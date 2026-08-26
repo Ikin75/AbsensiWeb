@@ -301,15 +301,6 @@
     </div>
 
     <script>
-      // ===== KONFIGURASI SUPABASE =====
-      const SUPABASE_URL = "https://wjiskmzydeesmmxxaqgv.supabase.co";
-      const SUPABASE_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqaXNrbXp5ZGVlc21teHhhcWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTcwOTksImV4cCI6MjEwMzI3MzA5OX0.GaBuPkkrhF_z2mvIIDv9Uy42V26nDftmQ3mjE-wK6_E";
-      const supabaseClient = window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_KEY,
-      );
-
       const OFFICE_LOCATIONS = [
         {
           nama: "BAT Singosari (utama)",
@@ -349,58 +340,33 @@
 
       // ===== FUNGSI DATABASE =====
       async function getDaftarKaryawan() {
-        const cached = localStorage.getItem("daftar_karyawan");
-        if (cached) return JSON.parse(cached);
-        const { data, error } = await supabaseClient
-          .from("karyawan")
-          .select("*");
-        if (error) {
-          console.error(error);
-          return [];
-        }
-        localStorage.setItem("daftar_karyawan", JSON.stringify(data));
-        return data;
+        const res = await fetch("http://localhost:5000/api/karyawan");
+        return res.json();
       }
 
       async function getLastRecord(id) {
-        const { data, error } = await supabaseClient
-          .from("absensi")
-          .select("jenis, created_at")
-          .eq("id_karyawan", id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (error) {
-          console.error(error);
-          return null;
-        }
-        return data.length > 0 ? data[0] : null;
+        const res = await fetch("http://localhost:5000/api/absensi");
+        const all = await res.json();
+        // filter manual di client (karena data kecil)
+        const records = all.filter((r) => r.id_karyawan === id).reverse();
+        return records.length > 0 ? records[0] : null;
       }
 
       async function simpanKeDB(id, nama, jenis, lat, lng, lokasi) {
-        const parts = new Intl.DateTimeFormat("id-ID", {
-          timeZone: "Asia/Jakarta",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        }).formatToParts(new Date());
-        const wibFormatted = `${parts[4].value}-${parts[2].value}-${parts[0].value} ${parts[6].value}:${parts[8].value}:${parts[10].value}`;
-
-        const { error } = await supabaseClient.from("absensi").insert({
-          id_karyawan: id,
-          nama: nama,
-          jenis: jenis,
-          lat: lat,
-          lng: lng,
-          lokasi: lokasi || "Tidak diketahui",
-          created_at_wib: wibFormatted,
+        const res = await fetch("http://localhost:5000/api/absensi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id_karyawan: id,
+            nama,
+            jenis,
+            lat,
+            lng,
+            lokasi,
+          }),
         });
-        if (error) throw error;
+        if (!res.ok) throw new Error("Gagal simpan");
       }
-
       // ===== GEOLOCATION =====
       function haversineDistance(lat1, lon1, lat2, lon2) {
         const R = 6371000;
