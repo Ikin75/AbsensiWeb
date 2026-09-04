@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Edit Data Absensi</title>
+    <title>Edit Data Shift</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
       * {
@@ -17,7 +17,7 @@
         padding: 20px;
       }
       .container {
-        max-width: 900px;
+        max-width: 1100px;
         margin: auto;
         background: white;
         border-radius: 16px;
@@ -33,6 +33,7 @@
         color: #64748b;
         margin-bottom: 20px;
       }
+
       .tab-nav {
         display: flex;
         gap: 10px;
@@ -50,6 +51,7 @@
         background: #3b82f6;
         color: white;
       }
+
       .btn {
         background: #3b82f6;
         color: white;
@@ -61,14 +63,15 @@
       .btn-danger {
         background: #ef4444;
       }
-      .btn-success {
-        background: #16a34a;
-      }
       .btn-small {
         padding: 6px 10px;
         font-size: 13px;
         margin: 2px;
       }
+      .btn-green {
+        background: #16a34a;
+      }
+
       table {
         width: 100%;
         border-collapse: collapse;
@@ -84,20 +87,17 @@
       th {
         background: #f1f5f9;
       }
-      .form-group {
-        margin-bottom: 15px;
+
+      .shift-group {
+        margin-bottom: 30px;
       }
-      .form-group label {
-        display: block;
-        font-weight: 600;
-        margin-bottom: 5px;
+      .shift-group h3 {
+        font-size: 18px;
+        margin-bottom: 10px;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 5px;
       }
-      .form-group input {
-        width: 100%;
-        padding: 10px;
-        border: 2px solid #e2e8f0;
-        border-radius: 8px;
-      }
+
       .modal-overlay {
         display: none;
         position: fixed;
@@ -117,12 +117,30 @@
         background: white;
         border-radius: 16px;
         padding: 30px;
-        max-width: 400px;
+        max-width: 500px;
         width: 100%;
       }
       .modal-box h2 {
         margin-bottom: 15px;
       }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+      .form-group input,
+      .form-group select {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
       .message {
         margin-top: 15px;
         padding: 10px;
@@ -137,20 +155,23 @@
         background: #fee2e2;
         color: #dc2626;
       }
+
+      .text-red {
+        color: #dc2626;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>🛠️ Edit Data</h1>
-      <p class="subtitle">Ubah data karyawan atau absensi</p>
+      <h1>🛠️ Edit Data Shift</h1>
+      <p class="subtitle">Ubah data absensi dengan tampilan rekapan shift</p>
 
       <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('karyawan')">
           👤 Karyawan
         </button>
-        <button class="tab-btn" onclick="switchTab('absensi')">
-          📋 Absensi
-        </button>
+        <button class="tab-btn" onclick="switchTab('shift')">📋 Shift</button>
       </div>
 
       <!-- Tab Karyawan -->
@@ -169,22 +190,9 @@
         </table>
       </div>
 
-      <!-- Tab Absensi -->
-      <div id="absensi-tab" style="display: none">
-        <h3>Riwayat Absensi</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Tanggal</th>
-              <th>ID</th>
-              <th>Nama</th>
-              <th>Jenis</th>
-              <th>Lokasi</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="absensi-table-body"></tbody>
-        </table>
+      <!-- Tab Shift (Rekapan) -->
+      <div id="shift-tab" style="display: none">
+        <div id="shift-container"></div>
       </div>
 
       <div id="message" class="message"></div>
@@ -211,43 +219,48 @@
       </div>
     </div>
 
-    <!-- Modal Edit Absensi -->
-    <div class="modal-overlay" id="editAbsensiModal">
+    <!-- Modal Edit Shift -->
+    <div class="modal-overlay" id="editShiftModal">
       <div class="modal-box">
-        <h2>Edit Absensi</h2>
+        <h2>Edit Shift</h2>
         <div class="form-group">
-          <label>ID Absensi</label>
-          <input type="text" id="editAbsensiId" readonly />
+          <label>ID Karyawan</label>
+          <input type="text" id="editShiftKaryawanId" readonly />
         </div>
         <div class="form-group">
-          <label>Jenis</label>
-          <select id="editAbsensiJenis">
-            <option value="Masuk">Masuk</option>
-            <option value="Pulang">Pulang</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Lokasi</label>
-          <input type="text" id="editAbsensiLokasi" />
-        </div>
-        <div class="form-group">
-          <label>Waktu (YYYY-MM-DD HH:MM:SS)</label>
+          <label>Waktu Masuk (YYYY-MM-DD HH:MM:SS)</label>
           <input
             type="text"
-            id="editAbsensiWaktu"
+            id="editShiftMasukWaktu"
             placeholder="2026-09-04 08:00:00"
           />
         </div>
-        <button class="btn" onclick="simpanEditAbsensi()">Simpan</button>
+        <div class="form-group">
+          <label>Lokasi Masuk</label>
+          <input type="text" id="editShiftMasukLokasi" />
+        </div>
+        <div class="form-group" id="editShiftPulangGroup">
+          <label>Waktu Pulang (YYYY-MM-DD HH:MM:SS)</label>
+          <input
+            type="text"
+            id="editShiftPulangWaktu"
+            placeholder="2026-09-04 17:00:00"
+          />
+        </div>
+        <div class="form-group">
+          <label>Lokasi Pulang</label>
+          <input type="text" id="editShiftPulangLokasi" />
+        </div>
+        <button class="btn btn-green" onclick="simpanEditShift()">
+          Simpan Perubahan
+        </button>
         <button class="btn btn-danger" onclick="closeModal()">Batal</button>
       </div>
     </div>
 
-    <!-- Modal Edit Absensi (Lokasi) -->
-    <!-- Modal Edit Absensi (Lokasi) -->
     <script>
       // ===== KONFIGURASI SUPABASE =====
-      const SUPABASE_URL = "https://wjiskmzydeesmmxxaqgv.supabase.co";
+      const SUPABASE_URL = "https://wjiskmzydeesmmxxaqgv.supabase.co"; // GANTI DENGAN URL KAMU
       const SUPABASE_KEY =
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqaXNrbXp5ZGVlc21teHhhcWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTcwOTksImV4cCI6MjEwMzI3MzA5OX0.GaBuPkkrhF_z2mvIIDv9Uy42V26nDftmQ3mjE-wK6_E"; // GANTI DENGAN KEY KAMU
       const supabaseClient = window.supabase.createClient(
@@ -256,21 +269,14 @@
       );
 
       let currentTab = "karyawan";
+      let allData = [];
+      let currentShift = null; // untuk menyimpan data shift yang sedang diedit
 
       // ===== FUNGSI FORMAT WIB =====
       function formatWIB(isoString) {
         if (!isoString) return "";
         const date = new Date(isoString);
-        return date.toLocaleString("id-ID", {
-          timeZone: "Asia/Jakarta",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        });
+        return date.toLocaleString("sv-SE", { timeZone: "Asia/Jakarta" }); // YYYY-MM-DD HH:MM:SS
       }
 
       // ===== LOAD DATA =====
@@ -280,7 +286,7 @@
           .select("*")
           .order("id_karyawan");
         if (error) {
-          showMessage("Gagal memuat karyawan: " + error.message, "error");
+          showMessage("Gagal: " + error.message, "error");
           return;
         }
         const tbody = document.getElementById("karyawan-table-body");
@@ -291,40 +297,126 @@
                         <td>${k.id_karyawan}</td>
                         <td>${k.nama}</td>
                         <td>${k.no_wa || "-"}</td>
-                        <td>
-                            <button class="btn btn-small" onclick="openEditKaryawan('${k.id_karyawan}', '${k.nama}', '${k.no_wa || ""}')">Edit</button>
-                        </td>
+                        <td><button class="btn btn-small" onclick="openEditKaryawan('${k.id_karyawan}', '${k.nama}', '${k.no_wa || ""}')">Edit</button></td>
                     </tr>`;
           tbody.innerHTML += row;
         });
       }
 
-      async function loadAbsensi() {
+      async function loadShiftData() {
         const { data, error } = await supabaseClient
           .from("absensi")
           .select("*")
-          .order("id", { ascending: false })
-          .limit(100);
+          .order("created_at", { ascending: true });
         if (error) {
-          showMessage("Gagal memuat absensi: " + error.message, "error");
+          showMessage("Gagal: " + error.message, "error");
           return;
         }
-        const tbody = document.getElementById("absensi-table-body");
-        tbody.innerHTML = "";
-        data.forEach((r) => {
-          const row = `
-                    <tr>
-                        <td>${formatWIB(r.created_at)}</td>
-                        <td>${r.id_karyawan}</td>
-                        <td>${r.nama}</td>
-                        <td>${r.jenis}</td>
-                        <td>${r.lokasi}</td>
+        allData = data;
+        buildShiftView();
+      }
+
+      // ===== BUAT TAMPILAN SHIFT (Rekapan) =====
+      function buildShiftView() {
+        const container = document.getElementById("shift-container");
+        if (allData.length === 0) {
+          container.innerHTML = "<p>Tidak ada data absensi.</p>";
+          return;
+        }
+
+        // Kelompokkan per karyawan
+        const grouped = {};
+        allData.forEach((r) => {
+          if (!grouped[r.id_karyawan])
+            grouped[r.id_karyawan] = {
+              id: r.id_karyawan,
+              nama: r.nama,
+              records: [],
+            };
+          grouped[r.id_karyawan].records.push(r);
+        });
+
+        let html = "";
+        for (const [id, group] of Object.entries(grouped)) {
+          const records = group.records.sort(
+            (a, b) => new Date(a.created_at) - new Date(b.created_at),
+          );
+          const pairs = [];
+          let currentMasuk = null;
+
+          records.forEach((r) => {
+            if (r.jenis === "Masuk") {
+              if (currentMasuk)
+                pairs.push({ masuk: currentMasuk, pulang: null });
+              currentMasuk = r;
+            } else if (r.jenis === "Pulang") {
+              if (currentMasuk) {
+                pairs.push({ masuk: currentMasuk, pulang: r });
+                currentMasuk = null;
+              } else {
+                pairs.push({ masuk: null, pulang: r });
+              }
+            }
+          });
+          if (currentMasuk) pairs.push({ masuk: currentMasuk, pulang: null });
+
+          if (pairs.length === 0) continue;
+
+          html += `<div class="shift-group">
+                    <h3>${group.nama} (${id})</h3>
+                    <table class="shift-table">
+                        <thead><tr>
+                            <th>Masuk</th><th>Lokasi Masuk</th>
+                            <th>Pulang</th><th>Lokasi Pulang</th>
+                            <th>Durasi</th><th>Status</th><th>Aksi</th>
+                        </tr></thead><tbody>`;
+
+          pairs.forEach((pair) => {
+            const masukWaktu = pair.masuk
+              ? formatWIB(pair.masuk.created_at)
+              : "-";
+            const masukLokasi = pair.masuk ? pair.masuk.lokasi : "-";
+            const pulangWaktu = pair.pulang
+              ? formatWIB(pair.pulang.created_at)
+              : '<span class="text-red">BELUM PULANG</span>';
+            const pulangLokasi = pair.pulang ? pair.pulang.lokasi : "-";
+            let durasi = "-",
+              statusText = "",
+              rowStyle = "";
+
+            if (pair.masuk && pair.pulang) {
+              const diffMs =
+                new Date(pair.pulang.created_at) -
+                new Date(pair.masuk.created_at);
+              const diffHours = diffMs / 3600000;
+              durasi = `${Math.floor(diffHours)} jam ${Math.round((diffHours % 1) * 60)} menit`;
+              statusText = "✅ Lengkap";
+            } else if (pair.masuk && !pair.pulang) {
+              statusText = "⚠️ Belum Pulang";
+              rowStyle = 'style="background:#fffbeb;"';
+            } else if (!pair.masuk && pair.pulang) {
+              statusText = "❓ Tidak Ada Masuk";
+              rowStyle = 'style="background:#fee2e2;"';
+            }
+
+            // Simpan ID masuk dan pulang di atribut data
+            const masukId = pair.masuk ? pair.masuk.id : null;
+            const pulangId = pair.pulang ? pair.pulang.id : null;
+
+            html += `<tr ${rowStyle}>
+                        <td>${masukWaktu}</td><td>${masukLokasi}</td>
+                        <td>${pulangWaktu}</td><td>${pulangLokasi}</td>
+                        <td>${durasi}</td><td>${statusText}</td>
                         <td>
-                            <button class="btn btn-small" onclick="openEditAbsensi(${r.id}, '${r.jenis}', '${r.lokasi}', '${r.created_at}')">Edit</button>
+                            <button class="btn btn-small" onclick="openEditShift('${id}', '${group.nama}', ${masukId}, ${pulangId}, '${pair.masuk ? pair.masuk.created_at : ""}', '${pair.masuk ? pair.masuk.lokasi : ""}', '${pair.pulang ? pair.pulang.created_at : ""}', '${pair.pulang ? pair.pulang.lokasi : ""}')">Edit</button>
                         </td>
                     </tr>`;
-          tbody.innerHTML += row;
-        });
+          });
+
+          html += "</tbody></table></div>";
+        }
+
+        container.innerHTML = html || "<p>Tidak ada data shift.</p>";
       }
 
       // ===== TAB SWITCH =====
@@ -335,8 +427,9 @@
           .forEach((b) => b.classList.remove("active"));
         document.getElementById("karyawan-tab").style.display =
           tab === "karyawan" ? "block" : "none";
-        document.getElementById("absensi-tab").style.display =
-          tab === "absensi" ? "block" : "none";
+        document.getElementById("shift-tab").style.display =
+          tab === "shift" ? "block" : "none";
+
         if (tab === "karyawan") {
           document
             .querySelector(".tab-btn:nth-child(1)")
@@ -346,7 +439,7 @@
           document
             .querySelector(".tab-btn:nth-child(2)")
             .classList.add("active");
-          loadAbsensi();
+          loadShiftData();
         }
       }
 
@@ -367,7 +460,7 @@
           .update({ nama, no_wa: noWa })
           .eq("id_karyawan", id);
         if (error) {
-          showMessage("Gagal menyimpan: " + error.message, "error");
+          showMessage("Gagal: " + error.message, "error");
           return;
         }
         showMessage("✅ Karyawan berhasil diupdate!", "success");
@@ -375,40 +468,115 @@
         loadKaryawan();
       }
 
-      // ===== MODAL ABSENSI =====
-      function openEditAbsensi(id, jenis, lokasi, waktu) {
-        document.getElementById("editAbsensiId").value = id;
-        document.getElementById("editAbsensiJenis").value = jenis;
-        document.getElementById("editAbsensiLokasi").value = lokasi;
-        // Ubah format waktu ISO ke YYYY-MM-DD HH:MM:SS
-        const date = new Date(waktu);
-        const formatted = date.toLocaleString("sv-SE", {
-          timeZone: "Asia/Jakarta",
-        }); // sv-SE memberi YYYY-MM-DD HH:MM:SS
-        document.getElementById("editAbsensiWaktu").value = formatted;
-        document.getElementById("editAbsensiModal").classList.add("active");
+      // ===== MODAL SHIFT =====
+      function openEditShift(
+        idKaryawan,
+        nama,
+        masukId,
+        pulangId,
+        masukWaktu,
+        masukLokasi,
+        pulangWaktu,
+        pulangLokasi,
+      ) {
+        currentShift = {
+          idKaryawan: idKaryawan,
+          nama: nama,
+          masukId: masukId,
+          pulangId: pulangId,
+        };
+        document.getElementById("editShiftKaryawanId").value = idKaryawan;
+        document.getElementById("editShiftMasukWaktu").value = masukWaktu
+          ? formatWIB(masukWaktu)
+          : "";
+        document.getElementById("editShiftMasukLokasi").value =
+          masukLokasi || "";
+        document.getElementById("editShiftPulangWaktu").value = pulangWaktu
+          ? formatWIB(pulangWaktu)
+          : "";
+        document.getElementById("editShiftPulangLokasi").value =
+          pulangLokasi || "";
+        document.getElementById("editShiftModal").classList.add("active");
       }
 
-      async function simpanEditAbsensi() {
-        const id = document.getElementById("editAbsensiId").value;
-        const jenis = document.getElementById("editAbsensiJenis").value;
-        const lokasi = document.getElementById("editAbsensiLokasi").value;
-        const waktu = document.getElementById("editAbsensiWaktu").value;
+      async function simpanEditShift() {
+        // Ambil data dari modal
+        const masukWaktu = document.getElementById("editShiftMasukWaktu").value;
+        const masukLokasi = document.getElementById(
+          "editShiftMasukLokasi",
+        ).value;
+        const pulangWaktu = document.getElementById(
+          "editShiftPulangWaktu",
+        ).value;
+        const pulangLokasi = document.getElementById(
+          "editShiftPulangLokasi",
+        ).value;
 
-        // Konversi ke format ISO UTC untuk disimpan
-        const waktuISO = new Date(waktu).toISOString();
+        // Konversi ke ISO UTC
+        const masukISO = new Date(masukWaktu).toISOString();
+        const pulangISO = pulangWaktu
+          ? new Date(pulangWaktu).toISOString()
+          : null;
 
-        const { error } = await supabaseClient
-          .from("absensi")
-          .update({ jenis, lokasi, created_at: waktuISO })
-          .eq("id", id);
-        if (error) {
-          showMessage("Gagal menyimpan: " + error.message, "error");
+        // Update data Masuk
+        if (currentShift.masukId) {
+          const { error: errorMasuk } = await supabaseClient
+            .from("absensi")
+            .update({ created_at: masukISO, lokasi: masukLokasi })
+            .eq("id", currentShift.masukId);
+          if (errorMasuk) {
+            showMessage("Gagal update masuk: " + errorMasuk.message, "error");
+            return;
+          }
+        } else {
+          // Jika tidak ada Masuk (aneh), kita tidak bisa insert karena tidak punya ID, tapi mungkin kita tambahkan?
+          showMessage("Tidak ada data Masuk untuk diupdate!", "error");
           return;
         }
-        showMessage("✅ Absensi berhasil diupdate!", "success");
+
+        // Update atau insert Pulang
+        if (currentShift.pulangId) {
+          // Update Pulang yang sudah ada
+          if (pulangISO) {
+            const { error: errorPulang } = await supabaseClient
+              .from("absensi")
+              .update({ created_at: pulangISO, lokasi: pulangLokasi })
+              .eq("id", currentShift.pulangId);
+            if (errorPulang) {
+              showMessage(
+                "Gagal update pulang: " + errorPulang.message,
+                "error",
+              );
+              return;
+            }
+          }
+        } else {
+          // Tidak ada Pulang, insert baru
+          if (pulangISO) {
+            const { error: errorInsert } = await supabaseClient
+              .from("absensi")
+              .insert({
+                id_karyawan: currentShift.idKaryawan,
+                nama: currentShift.nama,
+                jenis: "Pulang",
+                lat: 0,
+                lng: 0,
+                lokasi: pulangLokasi,
+                created_at: pulangISO,
+              });
+            if (errorInsert) {
+              showMessage(
+                "Gagal insert pulang: " + errorInsert.message,
+                "error",
+              );
+              return;
+            }
+          }
+        }
+
+        showMessage("✅ Shift berhasil diupdate!", "success");
         closeModal();
-        loadAbsensi();
+        loadShiftData(); // refresh tampilan
       }
 
       // ===== UTIL =====
