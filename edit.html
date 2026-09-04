@@ -63,13 +63,13 @@
       .btn-danger {
         background: #ef4444;
       }
+      .btn-green {
+        background: #16a34a;
+      }
       .btn-small {
         padding: 6px 10px;
         font-size: 13px;
         margin: 2px;
-      }
-      .btn-green {
-        background: #16a34a;
       }
 
       table {
@@ -165,7 +165,7 @@
   <body>
     <div class="container">
       <h1>🛠️ Edit Data Shift</h1>
-      <p class="subtitle">Ubah data absensi dengan tampilan rekapan shift</p>
+      <p class="subtitle">Ubah, tambah, atau hapus data absensi</p>
 
       <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('karyawan')">
@@ -177,6 +177,13 @@
       <!-- Tab Karyawan -->
       <div id="karyawan-tab">
         <h3>Daftar Karyawan</h3>
+        <button
+          class="btn btn-green"
+          onclick="openAddKaryawan()"
+          style="margin-bottom: 10px"
+        >
+          ➕ Tambah Karyawan
+        </button>
         <table>
           <thead>
             <tr>
@@ -192,6 +199,11 @@
 
       <!-- Tab Shift (Rekapan) -->
       <div id="shift-tab" style="display: none">
+        <div style="margin-bottom: 10px">
+          <button class="btn btn-green" onclick="openAddShift()">
+            ➕ Tambah Shift
+          </button>
+        </div>
         <div id="shift-container"></div>
       </div>
 
@@ -201,7 +213,7 @@
     <!-- Modal Edit Karyawan -->
     <div class="modal-overlay" id="editKaryawanModal">
       <div class="modal-box">
-        <h2>Edit Karyawan</h2>
+        <h2 id="judulEditKaryawan">Edit Karyawan</h2>
         <div class="form-group">
           <label>ID Karyawan</label>
           <input type="text" id="editKaryawanId" readonly />
@@ -219,10 +231,33 @@
       </div>
     </div>
 
+    <!-- Modal Tambah Karyawan -->
+    <div class="modal-overlay" id="addKaryawanModal">
+      <div class="modal-box">
+        <h2>Tambah Karyawan</h2>
+        <div class="form-group">
+          <label>ID Karyawan</label>
+          <input type="text" id="addKaryawanId" />
+        </div>
+        <div class="form-group">
+          <label>Nama</label>
+          <input type="text" id="addKaryawanNama" />
+        </div>
+        <div class="form-group">
+          <label>No. WhatsApp</label>
+          <input type="text" id="addKaryawanNoWa" />
+        </div>
+        <button class="btn btn-green" onclick="simpanAddKaryawan()">
+          Tambah
+        </button>
+        <button class="btn btn-danger" onclick="closeModal()">Batal</button>
+      </div>
+    </div>
+
     <!-- Modal Edit Shift -->
     <div class="modal-overlay" id="editShiftModal">
       <div class="modal-box">
-        <h2>Edit Shift</h2>
+        <h2 id="judulEditShift">Edit Shift</h2>
         <div class="form-group">
           <label>ID Karyawan</label>
           <input type="text" id="editShiftKaryawanId" readonly />
@@ -239,7 +274,7 @@
           <label>Lokasi Masuk</label>
           <input type="text" id="editShiftMasukLokasi" />
         </div>
-        <div class="form-group" id="editShiftPulangGroup">
+        <div class="form-group">
           <label>Waktu Pulang (YYYY-MM-DD HH:MM:SS)</label>
           <input
             type="text"
@@ -258,6 +293,53 @@
       </div>
     </div>
 
+    <!-- Modal Tambah Shift -->
+    <div class="modal-overlay" id="addShiftModal">
+      <div class="modal-box">
+        <h2>Tambah Shift</h2>
+        <div class="form-group">
+          <label>ID Karyawan</label>
+          <input
+            type="text"
+            id="addShiftKaryawanId"
+            list="karyawan-list"
+            oninput="autoNamaKaryawan()"
+          />
+          <datalist id="karyawan-list"></datalist>
+        </div>
+        <div class="form-group">
+          <label>Nama</label>
+          <input type="text" id="addShiftNama" readonly />
+        </div>
+        <div class="form-group">
+          <label>Waktu Masuk (YYYY-MM-DD HH:MM:SS)</label>
+          <input
+            type="text"
+            id="addShiftMasukWaktu"
+            placeholder="2026-09-04 08:00:00"
+          />
+        </div>
+        <div class="form-group">
+          <label>Lokasi Masuk</label>
+          <input type="text" id="addShiftMasukLokasi" />
+        </div>
+        <div class="form-group">
+          <label>Waktu Pulang (YYYY-MM-DD HH:MM:SS)</label>
+          <input
+            type="text"
+            id="addShiftPulangWaktu"
+            placeholder="Boleh kosong jika belum pulang"
+          />
+        </div>
+        <div class="form-group">
+          <label>Lokasi Pulang</label>
+          <input type="text" id="addShiftPulangLokasi" />
+        </div>
+        <button class="btn btn-green" onclick="simpanAddShift()">Tambah</button>
+        <button class="btn btn-danger" onclick="closeModal()">Batal</button>
+      </div>
+    </div>
+
     <script>
       // ===== KONFIGURASI SUPABASE =====
       const SUPABASE_URL = "https://wjiskmzydeesmmxxaqgv.supabase.co"; // GANTI DENGAN URL KAMU
@@ -270,7 +352,7 @@
 
       let currentTab = "karyawan";
       let allData = [];
-      let currentShift = null; // untuk menyimpan data shift yang sedang diedit
+      let allKaryawan = [];
 
       // ===== FUNGSI FORMAT WIB =====
       function formatWIB(isoString) {
@@ -289,6 +371,7 @@
           showMessage("Gagal: " + error.message, "error");
           return;
         }
+        allKaryawan = data;
         const tbody = document.getElementById("karyawan-table-body");
         tbody.innerHTML = "";
         data.forEach((k) => {
@@ -297,7 +380,10 @@
                         <td>${k.id_karyawan}</td>
                         <td>${k.nama}</td>
                         <td>${k.no_wa || "-"}</td>
-                        <td><button class="btn btn-small" onclick="openEditKaryawan('${k.id_karyawan}', '${k.nama}', '${k.no_wa || ""}')">Edit</button></td>
+                        <td>
+                            <button class="btn btn-small" onclick="openEditKaryawan('${k.id_karyawan}', '${k.nama}', '${k.no_wa || ""}')">Edit</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteKaryawan('${k.id_karyawan}')">Hapus</button>
+                        </td>
                     </tr>`;
           tbody.innerHTML += row;
         });
@@ -399,7 +485,6 @@
               rowStyle = 'style="background:#fee2e2;"';
             }
 
-            // Simpan ID masuk dan pulang di atribut data
             const masukId = pair.masuk ? pair.masuk.id : null;
             const pulangId = pair.pulang ? pair.pulang.id : null;
 
@@ -409,6 +494,7 @@
                         <td>${durasi}</td><td>${statusText}</td>
                         <td>
                             <button class="btn btn-small" onclick="openEditShift('${id}', '${group.nama}', ${masukId}, ${pulangId}, '${pair.masuk ? pair.masuk.created_at : ""}', '${pair.masuk ? pair.masuk.lokasi : ""}', '${pair.pulang ? pair.pulang.created_at : ""}', '${pair.pulang ? pair.pulang.lokasi : ""}')">Edit</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteShift(${masukId}, ${pulangId})">Hapus</button>
                         </td>
                     </tr>`;
           });
@@ -445,6 +531,8 @@
 
       // ===== MODAL KARYAWAN =====
       function openEditKaryawan(id, nama, noWa) {
+        document.getElementById("judulEditKaryawan").textContent =
+          "Edit Karyawan";
         document.getElementById("editKaryawanId").value = id;
         document.getElementById("editKaryawanNama").value = nama;
         document.getElementById("editKaryawanNoWa").value = noWa;
@@ -468,6 +556,49 @@
         loadKaryawan();
       }
 
+      // ===== MODAL TAMBAH KARYAWAN =====
+      function openAddKaryawan() {
+        document.getElementById("addKaryawanId").value = "";
+        document.getElementById("addKaryawanNama").value = "";
+        document.getElementById("addKaryawanNoWa").value = "";
+        document.getElementById("addKaryawanModal").classList.add("active");
+      }
+
+      async function simpanAddKaryawan() {
+        const id = document.getElementById("addKaryawanId").value.trim();
+        const nama = document.getElementById("addKaryawanNama").value.trim();
+        const noWa = document.getElementById("addKaryawanNoWa").value.trim();
+        if (!id || !nama) {
+          showMessage("ID dan Nama wajib diisi!", "error");
+          return;
+        }
+        const { error } = await supabaseClient
+          .from("karyawan")
+          .insert({ id_karyawan: id, nama: nama, no_wa: noWa });
+        if (error) {
+          showMessage("Gagal: " + error.message, "error");
+          return;
+        }
+        showMessage("✅ Karyawan berhasil ditambahkan!", "success");
+        closeModal();
+        loadKaryawan();
+      }
+
+      // ===== DELETE KARYAWAN =====
+      async function deleteKaryawan(id) {
+        if (!confirm(`Hapus karyawan ${id}?`)) return;
+        const { error } = await supabaseClient
+          .from("karyawan")
+          .delete()
+          .eq("id_karyawan", id);
+        if (error) {
+          showMessage("Gagal: " + error.message, "error");
+          return;
+        }
+        showMessage("✅ Karyawan dihapus!", "success");
+        loadKaryawan();
+      }
+
       // ===== MODAL SHIFT =====
       function openEditShift(
         idKaryawan,
@@ -479,12 +610,7 @@
         pulangWaktu,
         pulangLokasi,
       ) {
-        currentShift = {
-          idKaryawan: idKaryawan,
-          nama: nama,
-          masukId: masukId,
-          pulangId: pulangId,
-        };
+        document.getElementById("judulEditShift").textContent = "Edit Shift";
         document.getElementById("editShiftKaryawanId").value = idKaryawan;
         document.getElementById("editShiftMasukWaktu").value = masukWaktu
           ? formatWIB(masukWaktu)
@@ -500,7 +626,6 @@
       }
 
       async function simpanEditShift() {
-        // Ambil data dari modal
         const masukWaktu = document.getElementById("editShiftMasukWaktu").value;
         const masukLokasi = document.getElementById(
           "editShiftMasukLokasi",
@@ -512,36 +637,40 @@
           "editShiftPulangLokasi",
         ).value;
 
-        // Konversi ke ISO UTC
         const masukISO = new Date(masukWaktu).toISOString();
         const pulangISO = pulangWaktu
           ? new Date(pulangWaktu).toISOString()
           : null;
 
         // Update data Masuk
-        if (currentShift.masukId) {
+        const masukId = parseInt(
+          document.getElementById("editShiftKaryawanId").dataset.masukId,
+        );
+        if (masukId) {
           const { error: errorMasuk } = await supabaseClient
             .from("absensi")
             .update({ created_at: masukISO, lokasi: masukLokasi })
-            .eq("id", currentShift.masukId);
+            .eq("id", masukId);
           if (errorMasuk) {
             showMessage("Gagal update masuk: " + errorMasuk.message, "error");
             return;
           }
         } else {
-          // Jika tidak ada Masuk (aneh), kita tidak bisa insert karena tidak punya ID, tapi mungkin kita tambahkan?
+          // Tidak ada Masuk, bisa insert baru? Tapi kasus ini jarang.
           showMessage("Tidak ada data Masuk untuk diupdate!", "error");
           return;
         }
 
         // Update atau insert Pulang
-        if (currentShift.pulangId) {
-          // Update Pulang yang sudah ada
+        const pulangId = parseInt(
+          document.getElementById("editShiftKaryawanId").dataset.pulangId,
+        );
+        if (pulangId) {
           if (pulangISO) {
             const { error: errorPulang } = await supabaseClient
               .from("absensi")
               .update({ created_at: pulangISO, lokasi: pulangLokasi })
-              .eq("id", currentShift.pulangId);
+              .eq("id", pulangId);
             if (errorPulang) {
               showMessage(
                 "Gagal update pulang: " + errorPulang.message,
@@ -551,13 +680,12 @@
             }
           }
         } else {
-          // Tidak ada Pulang, insert baru
           if (pulangISO) {
             const { error: errorInsert } = await supabaseClient
               .from("absensi")
               .insert({
-                id_karyawan: currentShift.idKaryawan,
-                nama: currentShift.nama,
+                id_karyawan: idKaryawan,
+                nama: nama,
                 jenis: "Pulang",
                 lat: 0,
                 lng: 0,
@@ -576,7 +704,137 @@
 
         showMessage("✅ Shift berhasil diupdate!", "success");
         closeModal();
-        loadShiftData(); // refresh tampilan
+        loadShiftData();
+      }
+
+      // ===== MODAL TAMBAH SHIFT =====
+      function openAddShift() {
+        // Isi datalist karyawan
+        const datalist = document.getElementById("karyawan-list");
+        datalist.innerHTML = "";
+        allKaryawan.forEach((k) => {
+          datalist.innerHTML += `<option value="${k.id_karyawan}">${k.nama}</option>`;
+        });
+
+        document.getElementById("addShiftKaryawanId").value = "";
+        document.getElementById("addShiftNama").value = "";
+        document.getElementById("addShiftMasukWaktu").value = "";
+        document.getElementById("addShiftMasukLokasi").value = "";
+        document.getElementById("addShiftPulangWaktu").value = "";
+        document.getElementById("addShiftPulangLokasi").value = "";
+        document.getElementById("addShiftModal").classList.add("active");
+      }
+
+      function autoNamaKaryawan() {
+        const id = document
+          .getElementById("addShiftKaryawanId")
+          .value.trim()
+          .toUpperCase();
+        const karyawan = allKaryawan.find((k) => k.id_karyawan === id);
+        if (karyawan) {
+          document.getElementById("addShiftNama").value = karyawan.nama;
+        } else {
+          document.getElementById("addShiftNama").value = "";
+        }
+      }
+
+      async function simpanAddShift() {
+        const idKaryawan = document
+          .getElementById("addShiftKaryawanId")
+          .value.trim()
+          .toUpperCase();
+        const nama = document.getElementById("addShiftNama").value.trim();
+        const masukWaktu = document.getElementById("addShiftMasukWaktu").value;
+        const masukLokasi = document.getElementById(
+          "addShiftMasukLokasi",
+        ).value;
+        const pulangWaktu = document.getElementById(
+          "addShiftPulangWaktu",
+        ).value;
+        const pulangLokasi = document.getElementById(
+          "addShiftPulangLokasi",
+        ).value;
+
+        if (!idKaryawan || !nama) {
+          showMessage("ID Karyawan dan Nama wajib diisi!", "error");
+          return;
+        }
+        if (!masukWaktu && !pulangWaktu) {
+          showMessage("Minimal isi waktu Masuk atau Pulang!", "error");
+          return;
+        }
+
+        const masukISO = masukWaktu ? new Date(masukWaktu).toISOString() : null;
+        const pulangISO = pulangWaktu
+          ? new Date(pulangWaktu).toISOString()
+          : null;
+
+        // Insert Masuk jika ada
+        if (masukISO) {
+          const { error: errorMasuk } = await supabaseClient
+            .from("absensi")
+            .insert({
+              id_karyawan: idKaryawan,
+              nama: nama,
+              jenis: "Masuk",
+              lat: 0,
+              lng: 0,
+              lokasi: masukLokasi || "Tidak diketahui",
+              created_at: masukISO,
+            });
+          if (errorMasuk) {
+            showMessage("Gagal insert masuk: " + errorMasuk.message, "error");
+            return;
+          }
+        }
+
+        // Insert Pulang jika ada
+        if (pulangISO) {
+          const { error: errorPulang } = await supabaseClient
+            .from("absensi")
+            .insert({
+              id_karyawan: idKaryawan,
+              nama: nama,
+              jenis: "Pulang",
+              lat: 0,
+              lng: 0,
+              lokasi: pulangLokasi || "Tidak diketahui",
+              created_at: pulangISO,
+            });
+          if (errorPulang) {
+            showMessage("Gagal insert pulang: " + errorPulang.message, "error");
+            return;
+          }
+        }
+
+        showMessage("✅ Shift berhasil ditambahkan!", "success");
+        closeModal();
+        loadShiftData();
+      }
+
+      // ===== DELETE SHIFT =====
+      async function deleteShift(masukId, pulangId) {
+        if (!confirm("Hapus shift ini?")) return;
+        try {
+          if (masukId) {
+            const { error: errorMasuk } = await supabaseClient
+              .from("absensi")
+              .delete()
+              .eq("id", masukId);
+            if (errorMasuk) throw errorMasuk;
+          }
+          if (pulangId) {
+            const { error: errorPulang } = await supabaseClient
+              .from("absensi")
+              .delete()
+              .eq("id", pulangId);
+            if (errorPulang) throw errorPulang;
+          }
+          showMessage("✅ Shift berhasil dihapus!", "success");
+          loadShiftData();
+        } catch (e) {
+          showMessage("Gagal hapus: " + e.message, "error");
+        }
       }
 
       // ===== UTIL =====
