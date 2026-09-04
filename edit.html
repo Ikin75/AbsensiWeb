@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edit Data Absensi</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Segoe UI", sans-serif;
+        background: #f8fafc;
+        padding: 20px;
+      }
+      .container {
+        max-width: 900px;
+        margin: auto;
+        background: white;
+        border-radius: 16px;
+        padding: 30px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+      }
+      h1 {
+        font-size: 24px;
+        margin-bottom: 5px;
+        color: #1e293b;
+      }
+      .subtitle {
+        color: #64748b;
+        margin-bottom: 20px;
+      }
+      .tab-nav {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .tab-btn {
+        background: #e2e8f0;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .tab-btn.active {
+        background: #3b82f6;
+        color: white;
+      }
+      .btn {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .btn-danger {
+        background: #ef4444;
+      }
+      .btn-success {
+        background: #16a34a;
+      }
+      .btn-small {
+        padding: 6px 10px;
+        font-size: 13px;
+        margin: 2px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+      th,
+      td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 14px;
+      }
+      th {
+        background: #f1f5f9;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+      .form-group input {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+      }
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-overlay.active {
+        display: flex;
+      }
+      .modal-box {
+        background: white;
+        border-radius: 16px;
+        padding: 30px;
+        max-width: 400px;
+        width: 100%;
+      }
+      .modal-box h2 {
+        margin-bottom: 15px;
+      }
+      .message {
+        margin-top: 15px;
+        padding: 10px;
+        border-radius: 8px;
+        display: none;
+      }
+      .success {
+        background: #dcfce7;
+        color: #16a34a;
+      }
+      .error {
+        background: #fee2e2;
+        color: #dc2626;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🛠️ Edit Data</h1>
+      <p class="subtitle">Ubah data karyawan atau absensi</p>
+
+      <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab('karyawan')">
+          👤 Karyawan
+        </button>
+        <button class="tab-btn" onclick="switchTab('absensi')">
+          📋 Absensi
+        </button>
+      </div>
+
+      <!-- Tab Karyawan -->
+      <div id="karyawan-tab">
+        <h3>Daftar Karyawan</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nama</th>
+              <th>No. WA</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="karyawan-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Tab Absensi -->
+      <div id="absensi-tab" style="display: none">
+        <h3>Riwayat Absensi</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>ID</th>
+              <th>Nama</th>
+              <th>Jenis</th>
+              <th>Lokasi</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="absensi-table-body"></tbody>
+        </table>
+      </div>
+
+      <div id="message" class="message"></div>
+    </div>
+
+    <!-- Modal Edit Karyawan -->
+    <div class="modal-overlay" id="editKaryawanModal">
+      <div class="modal-box">
+        <h2>Edit Karyawan</h2>
+        <div class="form-group">
+          <label>ID Karyawan</label>
+          <input type="text" id="editKaryawanId" readonly />
+        </div>
+        <div class="form-group">
+          <label>Nama</label>
+          <input type="text" id="editKaryawanNama" />
+        </div>
+        <div class="form-group">
+          <label>No. WhatsApp</label>
+          <input type="text" id="editKaryawanNoWa" />
+        </div>
+        <button class="btn" onclick="simpanEditKaryawan()">Simpan</button>
+        <button class="btn btn-danger" onclick="closeModal()">Batal</button>
+      </div>
+    </div>
+
+    <!-- Modal Edit Absensi -->
+    <div class="modal-overlay" id="editAbsensiModal">
+      <div class="modal-box">
+        <h2>Edit Absensi</h2>
+        <div class="form-group">
+          <label>ID Absensi</label>
+          <input type="text" id="editAbsensiId" readonly />
+        </div>
+        <div class="form-group">
+          <label>Jenis</label>
+          <select id="editAbsensiJenis">
+            <option value="Masuk">Masuk</option>
+            <option value="Pulang">Pulang</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Lokasi</label>
+          <input type="text" id="editAbsensiLokasi" />
+        </div>
+        <div class="form-group">
+          <label>Waktu (YYYY-MM-DD HH:MM:SS)</label>
+          <input
+            type="text"
+            id="editAbsensiWaktu"
+            placeholder="2026-09-04 08:00:00"
+          />
+        </div>
+        <button class="btn" onclick="simpanEditAbsensi()">Simpan</button>
+        <button class="btn btn-danger" onclick="closeModal()">Batal</button>
+      </div>
+    </div>
+
+    <!-- Modal Edit Absensi (Lokasi) -->
+    <!-- Modal Edit Absensi (Lokasi) -->
+    <script>
+      // ===== KONFIGURASI SUPABASE =====
+      const SUPABASE_URL = "https://wjiskmzydeesmmxxaqgv.supabase.co";
+      const SUPABASE_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqaXNrbXp5ZGVlc21teHhhcWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTcwOTksImV4cCI6MjEwMzI3MzA5OX0.GaBuPkkrhF_z2mvIIDv9Uy42V26nDftmQ3mjE-wK6_E"; // GANTI DENGAN KEY KAMU
+      const supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY,
+      );
+
+      let currentTab = "karyawan";
+
+      // ===== FUNGSI FORMAT WIB =====
+      function formatWIB(isoString) {
+        if (!isoString) return "";
+        const date = new Date(isoString);
+        return date.toLocaleString("id-ID", {
+          timeZone: "Asia/Jakarta",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+      }
+
+      // ===== LOAD DATA =====
+      async function loadKaryawan() {
+        const { data, error } = await supabaseClient
+          .from("karyawan")
+          .select("*")
+          .order("id_karyawan");
+        if (error) {
+          showMessage("Gagal memuat karyawan: " + error.message, "error");
+          return;
+        }
+        const tbody = document.getElementById("karyawan-table-body");
+        tbody.innerHTML = "";
+        data.forEach((k) => {
+          const row = `
+                    <tr>
+                        <td>${k.id_karyawan}</td>
+                        <td>${k.nama}</td>
+                        <td>${k.no_wa || "-"}</td>
+                        <td>
+                            <button class="btn btn-small" onclick="openEditKaryawan('${k.id_karyawan}', '${k.nama}', '${k.no_wa || ""}')">Edit</button>
+                        </td>
+                    </tr>`;
+          tbody.innerHTML += row;
+        });
+      }
+
+      async function loadAbsensi() {
+        const { data, error } = await supabaseClient
+          .from("absensi")
+          .select("*")
+          .order("id", { ascending: false })
+          .limit(100);
+        if (error) {
+          showMessage("Gagal memuat absensi: " + error.message, "error");
+          return;
+        }
+        const tbody = document.getElementById("absensi-table-body");
+        tbody.innerHTML = "";
+        data.forEach((r) => {
+          const row = `
+                    <tr>
+                        <td>${formatWIB(r.created_at)}</td>
+                        <td>${r.id_karyawan}</td>
+                        <td>${r.nama}</td>
+                        <td>${r.jenis}</td>
+                        <td>${r.lokasi}</td>
+                        <td>
+                            <button class="btn btn-small" onclick="openEditAbsensi(${r.id}, '${r.jenis}', '${r.lokasi}', '${r.created_at}')">Edit</button>
+                        </td>
+                    </tr>`;
+          tbody.innerHTML += row;
+        });
+      }
+
+      // ===== TAB SWITCH =====
+      function switchTab(tab) {
+        currentTab = tab;
+        document
+          .querySelectorAll(".tab-btn")
+          .forEach((b) => b.classList.remove("active"));
+        document.getElementById("karyawan-tab").style.display =
+          tab === "karyawan" ? "block" : "none";
+        document.getElementById("absensi-tab").style.display =
+          tab === "absensi" ? "block" : "none";
+        if (tab === "karyawan") {
+          document
+            .querySelector(".tab-btn:nth-child(1)")
+            .classList.add("active");
+          loadKaryawan();
+        } else {
+          document
+            .querySelector(".tab-btn:nth-child(2)")
+            .classList.add("active");
+          loadAbsensi();
+        }
+      }
+
+      // ===== MODAL KARYAWAN =====
+      function openEditKaryawan(id, nama, noWa) {
+        document.getElementById("editKaryawanId").value = id;
+        document.getElementById("editKaryawanNama").value = nama;
+        document.getElementById("editKaryawanNoWa").value = noWa;
+        document.getElementById("editKaryawanModal").classList.add("active");
+      }
+
+      async function simpanEditKaryawan() {
+        const id = document.getElementById("editKaryawanId").value;
+        const nama = document.getElementById("editKaryawanNama").value;
+        const noWa = document.getElementById("editKaryawanNoWa").value;
+        const { error } = await supabaseClient
+          .from("karyawan")
+          .update({ nama, no_wa: noWa })
+          .eq("id_karyawan", id);
+        if (error) {
+          showMessage("Gagal menyimpan: " + error.message, "error");
+          return;
+        }
+        showMessage("✅ Karyawan berhasil diupdate!", "success");
+        closeModal();
+        loadKaryawan();
+      }
+
+      // ===== MODAL ABSENSI =====
+      function openEditAbsensi(id, jenis, lokasi, waktu) {
+        document.getElementById("editAbsensiId").value = id;
+        document.getElementById("editAbsensiJenis").value = jenis;
+        document.getElementById("editAbsensiLokasi").value = lokasi;
+        // Ubah format waktu ISO ke YYYY-MM-DD HH:MM:SS
+        const date = new Date(waktu);
+        const formatted = date.toLocaleString("sv-SE", {
+          timeZone: "Asia/Jakarta",
+        }); // sv-SE memberi YYYY-MM-DD HH:MM:SS
+        document.getElementById("editAbsensiWaktu").value = formatted;
+        document.getElementById("editAbsensiModal").classList.add("active");
+      }
+
+      async function simpanEditAbsensi() {
+        const id = document.getElementById("editAbsensiId").value;
+        const jenis = document.getElementById("editAbsensiJenis").value;
+        const lokasi = document.getElementById("editAbsensiLokasi").value;
+        const waktu = document.getElementById("editAbsensiWaktu").value;
+
+        // Konversi ke format ISO UTC untuk disimpan
+        const waktuISO = new Date(waktu).toISOString();
+
+        const { error } = await supabaseClient
+          .from("absensi")
+          .update({ jenis, lokasi, created_at: waktuISO })
+          .eq("id", id);
+        if (error) {
+          showMessage("Gagal menyimpan: " + error.message, "error");
+          return;
+        }
+        showMessage("✅ Absensi berhasil diupdate!", "success");
+        closeModal();
+        loadAbsensi();
+      }
+
+      // ===== UTIL =====
+      function closeModal() {
+        document
+          .querySelectorAll(".modal-overlay")
+          .forEach((m) => m.classList.remove("active"));
+      }
+
+      function showMessage(text, type) {
+        const msg = document.getElementById("message");
+        msg.textContent = text;
+        msg.className = "message " + type;
+        msg.style.display = "block";
+        setTimeout(() => {
+          msg.style.display = "none";
+        }, 3000);
+      }
+
+      // ===== INIT =====
+      loadKaryawan();
+    </script>
+  </body>
+</html>
