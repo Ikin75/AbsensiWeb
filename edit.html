@@ -600,6 +600,13 @@
       }
 
       // ===== MODAL SHIFT =====
+      let currentShiftId = {
+        masukId: null,
+        pulangId: null,
+        idKaryawan: null,
+        nama: null,
+      };
+
       function openEditShift(
         idKaryawan,
         nama,
@@ -622,6 +629,15 @@
           : "";
         document.getElementById("editShiftPulangLokasi").value =
           pulangLokasi || "";
+
+        // Simpan ID di variabel global
+        currentShiftId = {
+          masukId: masukId,
+          pulangId: pulangId,
+          idKaryawan: idKaryawan,
+          nama: nama,
+        };
+
         document.getElementById("editShiftModal").classList.add("active");
       }
 
@@ -637,40 +653,36 @@
           "editShiftPulangLokasi",
         ).value;
 
-        const masukISO = new Date(masukWaktu).toISOString();
+        const masukISO = masukWaktu ? new Date(masukWaktu).toISOString() : null;
         const pulangISO = pulangWaktu
           ? new Date(pulangWaktu).toISOString()
           : null;
 
+        // Cek apakah ID karyawan dan nama tersimpan
+        if (!currentShiftId.idKaryawan || !currentShiftId.nama) {
+          showMessage("Data shift tidak lengkap!", "error");
+          return;
+        }
+
         // Update data Masuk
-        const masukId = parseInt(
-          document.getElementById("editShiftKaryawanId").dataset.masukId,
-        );
-        if (masukId) {
+        if (currentShiftId.masukId) {
           const { error: errorMasuk } = await supabaseClient
             .from("absensi")
             .update({ created_at: masukISO, lokasi: masukLokasi })
-            .eq("id", masukId);
+            .eq("id", currentShiftId.masukId);
           if (errorMasuk) {
             showMessage("Gagal update masuk: " + errorMasuk.message, "error");
             return;
           }
-        } else {
-          // Tidak ada Masuk, bisa insert baru? Tapi kasus ini jarang.
-          showMessage("Tidak ada data Masuk untuk diupdate!", "error");
-          return;
         }
 
         // Update atau insert Pulang
-        const pulangId = parseInt(
-          document.getElementById("editShiftKaryawanId").dataset.pulangId,
-        );
-        if (pulangId) {
+        if (currentShiftId.pulangId) {
           if (pulangISO) {
             const { error: errorPulang } = await supabaseClient
               .from("absensi")
               .update({ created_at: pulangISO, lokasi: pulangLokasi })
-              .eq("id", pulangId);
+              .eq("id", currentShiftId.pulangId);
             if (errorPulang) {
               showMessage(
                 "Gagal update pulang: " + errorPulang.message,
@@ -680,12 +692,13 @@
             }
           }
         } else {
+          // Tidak ada data pulang sebelumnya, insert baru
           if (pulangISO) {
             const { error: errorInsert } = await supabaseClient
               .from("absensi")
               .insert({
-                id_karyawan: idKaryawan,
-                nama: nama,
+                id_karyawan: currentShiftId.idKaryawan,
+                nama: currentShiftId.nama,
                 jenis: "Pulang",
                 lat: 0,
                 lng: 0,
@@ -706,7 +719,6 @@
         closeModal();
         loadShiftData();
       }
-
       // ===== MODAL TAMBAH SHIFT =====
       function openAddShift() {
         // Isi datalist karyawan
