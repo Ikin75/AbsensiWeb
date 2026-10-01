@@ -297,9 +297,44 @@
           <div id="today-container" class="loading">Memuat data...</div>
         </div>
         <div id="rekapan-tab" style="display: none">
-          <button class="btn" onclick="downloadRekapanExcel()">
-            📥 Download Rekapan (.xlsx)
-          </button>
+          <div class="filter-row">
+            <label for="filterBulanRekap">Bulan:</label>
+            <select id="filterBulanRekap" onchange="applyRekapanFilter()">
+              <option value="all">Semua Bulan</option>
+              <option value="01">Januari</option>
+              <option value="02">Februari</option>
+              <option value="03">Maret</option>
+              <option value="04">April</option>
+              <option value="05">Mei</option>
+              <option value="06">Juni</option>
+              <option value="07">Juli</option>
+              <option value="08">Agustus</option>
+              <option value="09">September</option>
+              <option value="10">Oktober</option>
+              <option value="11">November</option>
+              <option value="12">Desember</option>
+            </select>
+
+            <label for="filterTahunRekap">Tahun:</label>
+            <select id="filterTahunRekap" onchange="applyRekapanFilter()">
+              <option value="all">Semua Tahun</option>
+            </select>
+
+            <button
+              class="btn"
+              onclick="downloadRekapanExcel()"
+              style="margin-bottom: 0; margin-left: auto"
+            >
+              📥 Download Sesuai Filter
+            </button>
+            <button
+              class="btn"
+              onclick="downloadAllRekapanExcel()"
+              style="margin-bottom: 0; background: #16a34a"
+            >
+              📥 Download Semua
+            </button>
+          </div>
           <div id="rekapan-container" class="loading">Memuat data...</div>
         </div>
       </div>
@@ -319,6 +354,7 @@
       let karyawanData = [];
       let statusSummary = [];
       let riwayatFiltered = [];
+      let rekapanFiltered = [];
 
       // ===== HELPER WIB =====
       function formatWIB(isoString) {
@@ -588,16 +624,53 @@
       }
 
       // ===== REKAPAN SHIFT =====
+      // ===== REKAPAN SHIFT (dengan filter) =====
       function buildRekapanShift() {
+        // Isi dropdown tahun
+        const tahunSet = new Set();
+        allData.forEach((r) => {
+          const d = new Date(r.created_at);
+          tahunSet.add(d.getFullYear());
+        });
+        const tahunSelect = document.getElementById("filterTahunRekap");
+        const currentVal = tahunSelect.value;
+        tahunSelect.innerHTML = '<option value="all">Semua Tahun</option>';
+        Array.from(tahunSet)
+          .sort()
+          .forEach((t) => {
+            tahunSelect.innerHTML += `<option value="${t}">${t}</option>`;
+          });
+        tahunSelect.value = currentVal || "all";
+
+        applyRekapanFilter();
+      }
+
+      function applyRekapanFilter() {
+        const bulan = document.getElementById("filterBulanRekap").value;
+        const tahun = document.getElementById("filterTahunRekap").value;
+
+        rekapanFiltered = allData.filter((r) => {
+          if (bulan === "all" && tahun === "all") return true;
+          const d = new Date(r.created_at);
+          const dWIB = new Date(
+            d.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
+          );
+          const m = String(dWIB.getMonth() + 1).padStart(2, "0");
+          const y = String(dWIB.getFullYear());
+          if (bulan !== "all" && m !== bulan) return false;
+          if (tahun !== "all" && y !== tahun) return false;
+          return true;
+        });
+
         const container = document.getElementById("rekapan-container");
-        if (allData.length === 0) {
-          container.innerHTML = "<p>Tidak ada data.</p>";
+        if (rekapanFiltered.length === 0) {
+          container.innerHTML = "<p>Tidak ada data untuk filter ini.</p>";
           return;
         }
 
-        // Kelompokkan per ID, lalu urutkan per timestamp
+        // Kelompokkan per karyawan
         const grouped = {};
-        allData.forEach((r) => {
+        rekapanFiltered.forEach((r) => {
           const id = r.id_karyawan;
           if (!grouped[id]) grouped[id] = { id, nama: r.nama, records: [] };
           grouped[id].records.push({
@@ -607,7 +680,8 @@
           });
         });
 
-        let html = "";
+        let html = `<p style="margin-bottom:10px; color:#64748b;">Menampilkan <b>${rekapanFiltered.length}</b> baris untuk ${Object.keys(grouped).length} karyawan</p>`;
+
         for (const [id, group] of Object.entries(grouped)) {
           const records = group.records.sort(
             (a, b) => a.timestamp - b.timestamp,
@@ -617,36 +691,30 @@
 
           records.forEach((r) => {
             if (r.jenis === "Masuk") {
-              // Jika ada masuk sebelumnya yang belum punya pulang, simpan dulu sebagai incomplete
-              if (currentMasuk) {
+              if (currentMasuk)
                 pairs.push({ masuk: currentMasuk, pulang: null });
-              }
               currentMasuk = r;
             } else if (r.jenis === "Pulang") {
               if (currentMasuk) {
                 pairs.push({ masuk: currentMasuk, pulang: r });
                 currentMasuk = null;
               } else {
-                // Pulang tanpa masuk (seharusnya jarang)
                 pairs.push({ masuk: null, pulang: r });
               }
             }
           });
-          // Jika masih ada masuk yang belum pulang
-          if (currentMasuk) {
-            pairs.push({ masuk: currentMasuk, pulang: null });
-          }
+          if (currentMasuk) pairs.push({ masuk: currentMasuk, pulang: null });
 
           if (pairs.length === 0) continue;
 
           html += `<div class="shift-group">
-                <h3>${group.nama} (${id})</h3>
-                <table class="shift-table">
-                    <thead><tr>
-                        <th>Masuk</th><th>Lokasi Masuk</th>
-                        <th>Pulang</th><th>Lokasi Pulang</th>
-                        <th>Durasi</th><th>Status</th>
-                    </tr></thead><tbody>`;
+            <h3>${group.nama} (${id})</h3>
+            <table class="shift-table">
+                <thead><tr>
+                    <th>Masuk</th><th>Lokasi Masuk</th>
+                    <th>Pulang</th><th>Lokasi Pulang</th>
+                    <th>Durasi</th><th>Status</th>
+                </tr></thead><tbody>`;
 
           pairs.forEach((pair) => {
             const masukWaktu = pair.masuk
@@ -667,27 +735,24 @@
               durasi = `${Math.floor(diffHours)} jam ${Math.floor((diffHours % 1) * 60)} menit`;
               statusText = "✅ Lengkap";
             } else if (pair.masuk && !pair.pulang) {
-              durasi = "-";
               statusText = "⚠️ Belum Pulang";
               rowStyle = 'style="background: #fffbeb;"';
             } else if (!pair.masuk && pair.pulang) {
-              durasi = "-";
               statusText = "❓ Tidak Ada Masuk";
               rowStyle = 'style="background: #fee2e2;"';
             }
 
             html += `<tr ${rowStyle}>
-                    <td>${masukWaktu}</td><td>${masukLok}</td>
-                    <td>${pulangWaktu}</td><td>${pulangLok}</td>
-                    <td>${durasi}</td><td>${statusText}</td>
-                </tr>`;
+                <td>${masukWaktu}</td><td>${masukLok}</td>
+                <td>${pulangWaktu}</td><td>${pulangLok}</td>
+                <td>${durasi}</td><td>${statusText}</td>
+            </tr>`;
           });
 
           html += "</tbody></table></div>";
         }
 
         container.innerHTML = html || "<p>Tidak ada data shift.</p>";
-        window.rekapanData = allData; // untuk download
       }
 
       // ===== DOWNLOAD =====
@@ -769,7 +834,89 @@
       }
 
       function downloadRekapanExcel() {
-        // Membuat ringkasan pasangan shift untuk Excel
+        // Download sesuai filter
+        if (rekapanFiltered.length === 0)
+          return alert("Tidak ada data untuk di-download.");
+
+        const rows = [];
+        const grouped = {};
+        rekapanFiltered.forEach((r) => {
+          const id = r.id_karyawan;
+          if (!grouped[id]) grouped[id] = { id, nama: r.nama, records: [] };
+          grouped[id].records.push({
+            jenis: r.jenis,
+            timestamp: new Date(r.created_at),
+            lokasi: r.lokasi,
+          });
+        });
+
+        for (const [id, group] of Object.entries(grouped)) {
+          const records = group.records.sort(
+            (a, b) => a.timestamp - b.timestamp,
+          );
+          let currentMasuk = null;
+          records.forEach((r) => {
+            if (r.jenis === "Masuk") {
+              if (currentMasuk)
+                rows.push({
+                  ID: id,
+                  Nama: group.nama,
+                  Masuk: formatWIB(currentMasuk.timestamp),
+                  "Lokasi Masuk": currentMasuk.lokasi,
+                  Pulang: "BELUM PULANG",
+                  "Lokasi Pulang": "",
+                  Durasi: "",
+                });
+              currentMasuk = r;
+            } else if (r.jenis === "Pulang") {
+              const masuk = currentMasuk;
+              const pulang = r;
+              const durasi = masuk
+                ? ((pulang.timestamp - masuk.timestamp) / 3600000).toFixed(1) +
+                  " jam"
+                : "";
+              rows.push({
+                ID: id,
+                Nama: group.nama,
+                Masuk: masuk ? formatWIB(masuk.timestamp) : "-",
+                "Lokasi Masuk": masuk ? masuk.lokasi : "",
+                Pulang: formatWIB(pulang.timestamp),
+                "Lokasi Pulang": pulang.lokasi,
+                Durasi: durasi,
+              });
+              currentMasuk = null;
+            }
+          });
+          if (currentMasuk) {
+            rows.push({
+              ID: id,
+              Nama: group.nama,
+              Masuk: formatWIB(currentMasuk.timestamp),
+              "Lokasi Masuk": currentMasuk.lokasi,
+              Pulang: "BELUM PULANG",
+              "Lokasi Pulang": "",
+              Durasi: "",
+            });
+          }
+        }
+
+        const bulan = document.getElementById("filterBulanRekap").value;
+        const tahun = document.getElementById("filterTahunRekap").value;
+        const namaFile =
+          bulan === "all" && tahun === "all"
+            ? `rekapan_shift_semua_${new Date().toISOString().slice(0, 10)}.xlsx`
+            : `rekapan_shift_${tahun}-${bulan}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Rekapan Shift");
+        XLSX.writeFile(wb, namaFile);
+      }
+
+      function downloadAllRekapanExcel() {
+        // Download semua data
+        if (allData.length === 0) return alert("Tidak ada data.");
+
         const rows = [];
         const grouped = {};
         allData.forEach((r) => {
@@ -832,13 +979,12 @@
           }
         }
 
-        if (rows.length === 0) return alert("Tidak ada data.");
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Rekapan Shift");
+        XLSX.utils.book_append_sheet(wb, ws, "Rekapan Shift Semua");
         XLSX.writeFile(
           wb,
-          `rekapan_shift_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          `rekapan_shift_SEMUA_${new Date().toISOString().slice(0, 10)}.xlsx`,
         );
       }
 
@@ -868,6 +1014,7 @@
             .querySelector(".tab-btn:nth-child(3)")
             .classList.add("active");
           document.getElementById("rekapan-tab").style.display = "block";
+          applyRekapanFilter();
         }
       }
 
