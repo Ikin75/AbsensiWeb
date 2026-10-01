@@ -238,9 +238,44 @@
 
       <div id="tab-content">
         <div id="riwayat-tab">
-          <button class="btn" onclick="downloadExcel()">
-            📥 Download Riwayat (.xlsx)
-          </button>
+          <div class="filter-row">
+            <label for="filterBulan">Bulan:</label>
+            <select id="filterBulan" onchange="applyRiwayatFilter()">
+              <option value="all">Semua Bulan</option>
+              <option value="01">Januari</option>
+              <option value="02">Februari</option>
+              <option value="03">Maret</option>
+              <option value="04">April</option>
+              <option value="05">Mei</option>
+              <option value="06">Juni</option>
+              <option value="07">Juli</option>
+              <option value="08">Agustus</option>
+              <option value="09">September</option>
+              <option value="10">Oktober</option>
+              <option value="11">November</option>
+              <option value="12">Desember</option>
+            </select>
+
+            <label for="filterTahun">Tahun:</label>
+            <select id="filterTahun" onchange="applyRiwayatFilter()">
+              <option value="all">Semua Tahun</option>
+            </select>
+
+            <button
+              class="btn"
+              onclick="downloadExcel()"
+              style="margin-bottom: 0; margin-left: auto"
+            >
+              📥 Download Sesuai Filter
+            </button>
+            <button
+              class="btn"
+              onclick="downloadAllExcel()"
+              style="margin-bottom: 0; background: #16a34a"
+            >
+              📥 Download Semua
+            </button>
+          </div>
           <div id="riwayat-container" class="loading">Memuat data...</div>
         </div>
         <div id="today-tab" style="display: none">
@@ -283,6 +318,7 @@
       let allData = [];
       let karyawanData = [];
       let statusSummary = [];
+      let riwayatFiltered = [];
 
       // ===== HELPER WIB =====
       function formatWIB(isoString) {
@@ -355,16 +391,56 @@
       }
 
       // ===== RIWAYAT =====
+      // ===== RIWAYAT (dengan filter) =====
       function buildRiwayat() {
+        // Isi dropdown tahun dari data
+        const tahunSet = new Set();
+        allData.forEach((r) => {
+          const d = new Date(r.created_at);
+          tahunSet.add(d.getFullYear());
+        });
+        const tahunSelect = document.getElementById("filterTahun");
+        const currentVal = tahunSelect.value;
+        tahunSelect.innerHTML = '<option value="all">Semua Tahun</option>';
+        Array.from(tahunSet)
+          .sort()
+          .forEach((t) => {
+            tahunSelect.innerHTML += `<option value="${t}">${t}</option>`;
+          });
+        tahunSelect.value = currentVal || "all";
+
+        applyRiwayatFilter();
+      }
+
+      function applyRiwayatFilter() {
+        const bulan = document.getElementById("filterBulan").value;
+        const tahun = document.getElementById("filterTahun").value;
+
+        riwayatFiltered = allData.filter((r) => {
+          if (bulan === "all" && tahun === "all") return true;
+          const d = new Date(r.created_at);
+          // Konversi ke WIB dulu
+          const dWIB = new Date(
+            d.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
+          );
+          const m = String(dWIB.getMonth() + 1).padStart(2, "0");
+          const y = String(dWIB.getFullYear());
+          if (bulan !== "all" && m !== bulan) return false;
+          if (tahun !== "all" && y !== tahun) return false;
+          return true;
+        });
+
         const container = document.getElementById("riwayat-container");
-        if (allData.length === 0) {
-          container.innerHTML = "<p>Tidak ada data.</p>";
+        if (riwayatFiltered.length === 0) {
+          container.innerHTML = "<p>Tidak ada data untuk filter ini.</p>";
           return;
         }
-        let html = `<table><thead><tr>
-            <th>Tanggal & Waktu (WIB)</th><th>ID</th><th>Nama</th><th>Jenis</th><th>Lokasi</th>
-        </tr></thead><tbody>`;
-        allData.forEach((r) => {
+
+        let html = `<p style="margin-bottom:10px; color:#64748b;">Menampilkan <b>${riwayatFiltered.length}</b> baris</p>`;
+        html += `<table><thead><tr>
+        <th>Tanggal & Waktu (WIB)</th><th>ID</th><th>Nama</th><th>Jenis</th><th>Lokasi</th>
+    </tr></thead><tbody>`;
+        riwayatFiltered.forEach((r) => {
           html += `<tr><td>${formatWIB(r.created_at)}</td><td>${r.id_karyawan}</td><td>${r.nama}</td><td>${r.jenis}</td><td>${r.lokasi}</td></tr>`;
         });
         html += "</tbody></table>";
@@ -616,6 +692,31 @@
 
       // ===== DOWNLOAD =====
       function downloadExcel() {
+        // Download sesuai filter yang aktif
+        if (riwayatFiltered.length === 0)
+          return alert("Tidak ada data untuk di-download.");
+        const data = riwayatFiltered.map((r) => ({
+          Tanggal: formatWIB(r.created_at),
+          ID: r.id_karyawan,
+          Nama: r.nama,
+          Jenis: r.jenis,
+          Lokasi: r.lokasi,
+        }));
+        const bulan = document.getElementById("filterBulan").value;
+        const tahun = document.getElementById("filterTahun").value;
+        const namaFile =
+          bulan === "all" && tahun === "all"
+            ? `riwayat_absensi_semua_${new Date().toISOString().slice(0, 10)}.xlsx`
+            : `riwayat_absensi_${tahun}-${bulan}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Riwayat");
+        XLSX.writeFile(wb, namaFile);
+      }
+
+      function downloadAllExcel() {
+        // Download semua data (tanpa filter)
         if (allData.length === 0) return alert("Tidak ada data.");
         const data = allData.map((r) => ({
           Tanggal: formatWIB(r.created_at),
@@ -626,10 +727,10 @@
         }));
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Riwayat");
+        XLSX.utils.book_append_sheet(wb, ws, "Semua Riwayat");
         XLSX.writeFile(
           wb,
-          `riwayat_absensi_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          `riwayat_absensi_SEMUA_${new Date().toISOString().slice(0, 10)}.xlsx`,
         );
       }
 
