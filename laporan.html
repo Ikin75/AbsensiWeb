@@ -316,18 +316,30 @@
       // ===== FETCH DATA =====
       async function fetchData() {
         try {
-          const [absensiRes, karyawanRes] = await Promise.all([
-            supabaseClient
+          // === Ambil data absensi secara bertahap (pagination) ===
+          let allAbsensi = [];
+          let from = 0;
+          const batchSize = 1000;
+          while (true) {
+            const { data, error } = await supabaseClient
               .from("absensi")
               .select("*")
-              .order("created_at", { ascending: true }),
-            supabaseClient.from("karyawan").select("*"),
-          ]);
-          if (absensiRes.error) throw absensiRes.error;
-          if (karyawanRes.error) throw karyawanRes.error;
+              .order("created_at", { ascending: true })
+              .range(from, from + batchSize - 1);
+            if (error) throw error;
+            allAbsensi = allAbsensi.concat(data);
+            if (data.length < batchSize) break; // sudah habis
+            from += batchSize;
+          }
 
-          allData = absensiRes.data || [];
-          karyawanData = karyawanRes.data || [];
+          // === Ambil data karyawan ===
+          const { data: karyawan, error: errKaryawan } = await supabaseClient
+            .from("karyawan")
+            .select("*");
+          if (errKaryawan) throw errKaryawan;
+
+          allData = allAbsensi;
+          karyawanData = karyawan || [];
 
           buildRiwayat();
           buildStatusSummary();
